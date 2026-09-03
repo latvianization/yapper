@@ -500,17 +500,32 @@ const app = createApp({
         if (processed.length > prevCount && prevCount > 0) {
           const lastMsg = processed[processed.length - 1];
           if (lastMsg.senderId !== currentUser.value?.uid) {
-            if (audioEnabled.value) window.utils.playNotificationChime();
-            if (lastMsg.soundEffect) window.utils.playSoundEffect(lastMsg.soundEffect);
-            if (notifsEnabled.value && window.Notification && Notification.permission === 'granted') {
-              new Notification(`New message from ${lastMsg.senderName}`, {
-                body: lastMsg.text || 'Sent an attachment',
-                icon: 'favicon.ico'
-              });
+            // Rule: If user sees chat with new message, then NO push notification, else push!
+            const isUserSeeingChat = (!document.hidden && document.hasFocus()) &&
+                                     (activeChat.value && (lastMsg.channelId ? activeChat.value.id === lastMsg.channelId : true));
+
+            if (!isUserSeeingChat) {
+              if (audioEnabled.value) window.utils.playNotificationChime();
+              if (notifsEnabled.value && window.Notification && Notification.permission === 'granted') {
+                const notif = new Notification(`#${activeChat.value?.name || 'chat'} • ${lastMsg.senderName}`, {
+                  body: lastMsg.text || 'Sent an attachment',
+                  icon: 'favicon.ico',
+                  tag: `channel-${lastMsg.channelId || activeChat.value?.id}`
+                });
+                notif.onclick = () => {
+                  window.focus();
+                  notif.close();
+                };
+              }
+            } else {
+              console.log('[Notification] User is actively viewing this chat. Push notification suppressed.');
             }
+
+            if (lastMsg.soundEffect) window.utils.playSoundEffect(lastMsg.soundEffect);
           }
         }
         scrollToBottom();
+
       });
     };
 
@@ -1499,7 +1514,25 @@ const app = createApp({
       document.documentElement.setAttribute('data-theme', theme.value);
       window.addEventListener('keydown', handleGlobalKeydown);
 
+      // Register Firebase Messaging Service Worker for background push notifications
+      if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+        navigator.serviceWorker.register('firebase-messaging-sw.js').catch(err => {
+          console.warn('[ServiceWorker] Registration notice:', err);
+        });
+
+        // Listen for notification click navigation messages from Service Worker
+        navigator.serviceWorker.addEventListener('message', (event) => {
+          if (event.data && event.data.type === 'NAVIGATE_CHANNEL' && event.data.channelId) {
+            const targetChannel = companyChannels.value.find(c => c.id === event.data.channelId);
+            if (targetChannel) {
+              selectChat(targetChannel, 'channel');
+            }
+          }
+        });
+      }
+
       window.addEventListener('online', () => {
+
         showToast('Internet connection restored — syncing offline queue...', 'success');
         window.fbHelper.flushOfflineQueue();
       });

@@ -1,0 +1,45 @@
+name: yapper
+description: "Yapper - Next-Gen Modern Team Chat & Events Platform migrated to Flutter."
+publish_to: 'none'
+version: 2.2.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+  flutter: ">=3.19.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.5.1
+
+  # Navigation & Routing
+  go_router: ^14.2.0
+
+  # Networking & HTTP
+  dio: ^5.4.3+1
+
+  # Local Key-Value Persistence
+  shared_preferences: ^2.2.3
+
+  # Multiplatform Cryptography (AES-GCM 256, PBKDF2, SHA-256)
+  cryptography: ^2.7.0
+
+  # Formatting & Identifiers
+  intl: ^0.19.0
+  uuid: ^4.4.0
+
+  # Markdown rendering in chat
+  flutter_markdown: ^0.7.2
+
+  # Multiplatform Icons
+  lucide_icons: ^0.257.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true
