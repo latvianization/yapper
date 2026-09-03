@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:yapper/core/theme/app_theme.dart';
 
 class WhiteboardPoint {
@@ -27,7 +27,7 @@ class _WhiteboardDialogState extends State<WhiteboardDialog> {
   final List<List<WhiteboardPoint>> _lines = [];
   List<WhiteboardPoint>? _currentLine;
   Color _selectedColor = AppColors.primary;
-  double _strokeWidth = 3.0;
+  final double _strokeWidth = 3.0;
 
   final List<Color> _palette = [
     AppColors.primary,

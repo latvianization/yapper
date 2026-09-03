@@ -1,7 +1,6 @@
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import 'package:yapper/core/constants/app_constants.dart';
 import 'package:yapper/core/services/notification_service.dart';
 import 'package:yapper/core/utils/crypto_helper.dart';
 import 'package:yapper/features/auth/providers/auth_provider.dart';

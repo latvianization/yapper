@@ -15,7 +15,7 @@
 * **Networking**: `dio: ^5.4.3+1` (Interceptors, retry, bearer token authorization)
 * **Local Persistence**: `shared_preferences: ^2.2.3` (Local user cache, theme settings)
 * **Cryptography**: `cryptography: ^2.7.0` (Zero-knowledge AES-GCM 256-bit, PBKDF2 100k iterations)
-* **Typography & Icons**: `lucide_icons: ^0.257.0`, Material 3 design system
+* **Typography & Icons**: `lucide_icons_flutter: ^3.1.17`, Material 3 design system
 * **Markdown**: `flutter_markdown: ^0.7.2`
 
 ---

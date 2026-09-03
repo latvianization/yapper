@@ -2,11 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import 'package:yapper/core/constants/app_constants.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:yapper/core/services/notification_service.dart';
 import 'package:yapper/core/theme/app_theme.dart';
 import 'package:yapper/features/auth/providers/auth_provider.dart';
+import 'package:yapper/features/chat/models/channel_model.dart';
 import 'package:yapper/features/chat/providers/chat_provider.dart';
 import 'package:yapper/features/chat/views/channel_webhooks_dialog.dart';
 import 'package:yapper/features/chat/views/command_palette_dialog.dart';
@@ -98,18 +98,12 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatProvider);
     final messages = ref.watch(currentChannelMessagesProvider);
-    final authState = ref.watch(authProvider);
     final isDesktop = MediaQuery.of(context).size.width >= 800;
 
-    return Shortcuts(
-      shortcuts: <LogicalKeySet, Intent>{
-        LogicalKeySet(LogicalKeyboardKey.meta, LogicalKeyboardKey.keyK): const _CommandIntent(),
-        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK): const _CommandIntent(),
-      },
-      actions: <Type, Action<Intent>>{
-        _CommandIntent: CallbackAction<_CommandIntent>(
-          onInvoke: (intent) => _openCommandPalette(),
-        ),
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.keyK, meta: true): _openCommandPalette,
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true): _openCommandPalette,
       },
       child: Scaffold(
         drawer: isDesktop ? null : Drawer(child: _buildSidebar(context)),
@@ -197,23 +191,26 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
             size: 18,
             color: AppColors.primary,
           ),
-          const SizedBox(width: 8),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                active?.name ?? 'general',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textMain),
-              ),
-              if (active?.description.isNotEmpty == true)
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  active!.description,
-                  style: const TextStyle(fontSize: 11, color: AppColors.textDim),
+                  active?.name ?? 'general',
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: AppColors.textMain),
+                  overflow: TextOverflow.ellipsis,
                 ),
-            ],
+                if (active?.description.isNotEmpty == true)
+                  Text(
+                    active!.description,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textDim),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
           ),
-          const Spacer(),
+          const SizedBox(width: 8),
           // Command Palette Search Trigger
           InkWell(
             onTap: _openCommandPalette,
@@ -258,7 +255,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
 
     final categories = ['ANNOUNCEMENTS', 'TEXT CHANNELS', 'CI & ALERTS', 'VOICE & HUDDLES'];
 
-    return Container(
+    return Material(
       color: AppColors.bgSidebar,
       child: Column(
         children: [
@@ -282,13 +279,15 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                   child: const Text('⚡', style: TextStyle(fontSize: 18)),
                 ),
                 const SizedBox(width: 10),
-                const Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Yapper HQ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textMain)),
-                    Text('Engineering & Product', style: TextStyle(fontSize: 10, color: AppColors.textDim)),
-                  ],
+                const Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Yapper HQ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textMain), overflow: TextOverflow.ellipsis),
+                      Text('Engineering & Product', style: TextStyle(fontSize: 10, color: AppColors.textDim), overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -308,7 +307,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                 ),
                 ListTile(
                   dense: true,
-                  leading: const Icon(LucideIcons.edit3, size: 16, color: AppColors.accent),
+                  leading: const Icon(LucideIcons.penTool, size: 16, color: AppColors.accent),
                   title: const Text('Whiteboard', style: TextStyle(fontSize: 13, color: AppColors.textMain)),
                   onTap: _openWhiteboard,
                 ),
@@ -349,31 +348,31 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
 
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-                      decoration: BoxDecoration(
+                      child: Material(
                         color: isSelected ? AppColors.bgSurfaceHover : Colors.transparent,
                         borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: ListTile(
-                        dense: true,
-                        leading: Icon(
-                          channelIcon,
-                          size: 15,
-                          color: isSelected ? AppColors.primary : AppColors.textDim,
-                        ),
-                        title: Text(
-                          ch.name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                            color: isSelected ? AppColors.textMain : AppColors.textMuted,
+                        child: ListTile(
+                          dense: true,
+                          leading: Icon(
+                            channelIcon,
+                            size: 15,
+                            color: isSelected ? AppColors.primary : AppColors.textDim,
                           ),
+                          title: Text(
+                            ch.name,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                              color: isSelected ? AppColors.textMain : AppColors.textMuted,
+                            ),
+                          ),
+                          onTap: () {
+                            ref.read(chatProvider.notifier).selectChannel(ch);
+                            if (Scaffold.of(context).isDrawerOpen) {
+                              Navigator.pop(context);
+                            }
+                          },
                         ),
-                        onTap: () {
-                          ref.read(chatProvider.notifier).selectChannel(ch);
-                          if (Scaffold.of(context).isDrawerOpen) {
-                            Navigator.pop(context);
-                          }
-                        },
                       ),
                     );
                   }),
@@ -406,7 +405,7 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                         Text(
                           authState.user!.displayName,
                           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textMain),
-                          overflow: TextTraceMode.ellipsis == null ? TextOverflow.ellipsis : TextOverflow.ellipsis,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
                           '@${authState.user!.status}',
@@ -422,8 +421,4 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
       ),
     );
   }
-}
-
-class _CommandIntent extends Intent {
-  const _CommandIntent();
 }

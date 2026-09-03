@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
-import 'package:yapper/core/constants/app_constants.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:yapper/core/theme/app_theme.dart';
 import 'package:yapper/features/chat/providers/chat_provider.dart';
 
@@ -207,7 +206,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 const SizedBox(width: 8),
                 // Send or Voice Memo Button
                 IconButton.filled(
-                  style: IconButton.filled(
+                  style: IconButton.styleFrom(
                     backgroundColor: _hasText ? AppColors.primary : AppColors.bgSurface2,
                   ),
                   icon: Icon(

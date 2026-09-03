@@ -19,6 +19,10 @@ git clone https://github.com/your-org/yapper.git
 cd yapper
 flutter pub get
 
+# Static analysis & unit/widget tests
+flutter analyze
+flutter test
+
 # Run on your target platform
 flutter run -d chrome     # Web
 flutter run -d linux      # Linux desktop
@@ -28,7 +32,40 @@ flutter run -d android    # Android emulator/device
 flutter run -d ios        # iOS simulator/device
 ```
 
-### 2. Run the Discord-Compatible CI/CD API Server
+### 2. Build for Web & Production
+
+#### Flutter Web Build
+To build the Flutter web application for deployment:
+
+```bash
+# Ensure web platform scaffolding exists (if not already generated)
+flutter create . --platforms web
+
+# Build production release bundle (outputs to build/web/)
+flutter build web --release
+
+# Or build with WebAssembly (Wasm) support (Flutter 3.22+)
+flutter build web --release --wasm
+```
+
+The output in `build/web/` can be deployed directly to Firebase Hosting, Cloudflare Pages, Vercel, or Nginx.
+
+#### Other Production Targets
+```bash
+flutter build linux --release      # Linux desktop binary
+flutter build windows --release    # Windows desktop binary
+flutter build apk --release        # Android APK
+```
+
+#### Legacy Static Web Prototype (Zero-Build)
+To preview the lightweight client-side Vue 3 prototype (`index.html`):
+```bash
+# Serve locally via Python or Node
+python3 -m http.server 8080
+# or: npx serve .
+```
+
+### 3. Run the Discord-Compatible CI/CD API Server
 Allows GitHub Actions, GitLab CI, or Jenkins to post build alerts directly to Yapper channels.
 
 ```bash
@@ -112,6 +149,8 @@ Add this step to `.github/workflows/ci.yml` to receive automated build status ca
 ## 📁 Repository Structure
 
 * [`lib/`](file:///home/andrejs/Desktop/yapper/lib/): Flutter application (Riverpod state, GoRouter navigation, Obsidian Dark theme).
+* [`web/`](file:///home/andrejs/Desktop/yapper/web/): Flutter web entrypoint, HTML template, and PWA manifest.
+* [`test/`](file:///home/andrejs/Desktop/yapper/test/): Unit and widget tests (`flutter test`).
 * [`server/api_server.js`](file:///home/andrejs/Desktop/yapper/server/api_server.js): Discord-compatible CI/CD Webhooks & Channel REST API server.
 * [`scripts/ci_webhook_demo.sh`](file:///home/andrejs/Desktop/yapper/scripts/ci_webhook_demo.sh): CI webhook test & simulation script.
 * [`AGENTS.md`](file:///home/andrejs/Desktop/yapper/AGENTS.md): High-density architecture context and coding rules for AI assistants.

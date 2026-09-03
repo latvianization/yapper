@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:yapper/core/constants/app_constants.dart';
 import 'package:yapper/core/theme/app_theme.dart';
 import 'package:yapper/core/utils/formatters.dart';
@@ -130,7 +130,7 @@ class _EventsHubDialogState extends State<EventsHubDialog> {
                         const SizedBox(height: 10),
                         Row(
                           children: [
-                            Icon(LucideIcons.clock, size: 14, color: AppColors.textDim),
+                            const Icon(LucideIcons.clock, size: 14, color: AppColors.textDim),
                             const SizedBox(width: 4),
                             Text(Formatters.formatTime(event.startDate), style: const TextStyle(fontSize: 12, color: AppColors.textDim)),
                             const Spacer(),

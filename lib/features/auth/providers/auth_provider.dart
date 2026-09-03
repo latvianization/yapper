@@ -47,14 +47,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     } catch (_) {}
 
     // Default demo mock user matching Yapper's initial experience
-    final defaultUser = const UserModel(
+    const defaultUser = UserModel(
       uid: 'user_alex',
       email: 'alex.rivera@yapper.corp',
       displayName: 'Alex Rivera',
       status: 'online',
       role: AppConstants.roleOwner,
     );
-    state = AuthState(user: defaultUser, isLoading: false);
+    state = const AuthState(user: defaultUser, isLoading: false);
   }
 
   Future<void> login(String email, String displayName) async {

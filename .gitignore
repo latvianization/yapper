@@ -6,6 +6,13 @@
 .flutter-plugins-dependencies
 .packages
 build/
+build/web/
+build/app/
+build/android/
+build/ios/
+build/macos/
+build/linux/
+build/windows/
 
 # Symbol & debug maps
 *.js.map
@@ -13,8 +20,17 @@ build/
 *.wasm.map
 
 # ==============================================================================
+# Web Build Artifacts
+# ==============================================================================
+build/web/
+**/web/build/
+**/web/.dart_tool/
+
+# ==============================================================================
 # Android
 # ==============================================================================
+**/android/**/build/
+**/android/app/build/
 **/android/**/gradle-wrapper.jar
 **/android/.gradle/
 **/android/captures/
@@ -29,6 +45,9 @@ build/
 # ==============================================================================
 # iOS & macOS
 # ==============================================================================
+**/ios/**/build/
+**/ios/build/
+**/ios/DerivedData/
 **/ios/**/GeneratedPluginRegistrant.h
 **/ios/**/GeneratedPluginRegistrant.m
 **/ios/Flutter/App.framework
@@ -40,6 +59,9 @@ build/
 **/ios/.symlinks/
 **/ios/Pods/
 **/ios/Podfile.lock
+**/macos/**/build/
+**/macos/build/
+**/macos/DerivedData/
 **/macos/**/GeneratedPluginRegistrant.swift
 **/macos/Flutter/ephemeral/
 **/macos/.symlinks/
@@ -59,8 +81,14 @@ xcuserdata/
 # ==============================================================================
 # Linux & Windows Desktop
 # ==============================================================================
+**/linux/**/build/
+**/linux/build/
 **/linux/flutter/ephemeral/
+**/linux/CMakeCache.txt
+**/linux/CMakeFiles/
 **/windows/flutter/ephemeral/
+**/windows/**/build/
+**/windows/build/
 **/windows/CMakeCache.txt
 **/windows/CMakeFiles/
 *.vcxproj
@@ -108,3 +136,27 @@ desktop.ini
 !.env.example
 *.pem
 *.key
+
+# ==============================================================================
+# Node.js Server & Package Management
+# ==============================================================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# ==============================================================================
+# Testing & Coverage
+# ==============================================================================
+coverage/
+*.lcov
+
+# ==============================================================================
+# Miscellaneous & System Dumps
+# ==============================================================================
+*.crash
+core.*
+*~
+*.swp
+*.swo

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:lucide_icons/lucide_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:yapper/core/constants/app_constants.dart';
 import 'package:yapper/core/theme/app_theme.dart';
 import 'package:yapper/core/utils/formatters.dart';
