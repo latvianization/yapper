@@ -8,7 +8,9 @@ import 'package:yapper/core/services/notification_service.dart';
 import 'package:yapper/core/theme/app_theme.dart';
 import 'package:yapper/features/auth/providers/auth_provider.dart';
 import 'package:yapper/features/chat/providers/chat_provider.dart';
+import 'package:yapper/features/chat/views/channel_webhooks_dialog.dart';
 import 'package:yapper/features/chat/views/command_palette_dialog.dart';
+
 import 'package:yapper/features/chat/widgets/chat_input_bar.dart';
 import 'package:yapper/features/chat/widgets/message_bubble.dart';
 import 'package:yapper/features/chat/widgets/user_avatar.dart';
@@ -83,6 +85,14 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
       ),
     );
   }
+
+  void _openWebhooksDialog(ChannelModel channel) {
+    showDialog(
+      context: context,
+      builder: (ctx) => ChannelWebhooksDialog(channel: channel),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -230,6 +240,13 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
             onPressed: _openEventsHub,
             tooltip: 'Events Hub',
           ),
+          if (active != null) ...[
+            IconButton(
+              icon: const Icon(LucideIcons.webhook, size: 18, color: AppColors.textMuted),
+              onPressed: () => _openWebhooksDialog(active),
+              tooltip: 'Discord CI Webhooks & Integrations',
+            ),
+          ],
         ],
       ),
     );
@@ -238,6 +255,8 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
   Widget _buildSidebar(BuildContext context) {
     final chatState = ref.watch(chatProvider);
     final authState = ref.watch(authProvider);
+
+    final categories = ['ANNOUNCEMENTS', 'TEXT CHANNELS', 'CI & ALERTS', 'VOICE & HUDDLES'];
 
     return Container(
       color: AppColors.bgSidebar,
@@ -275,12 +294,12 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
             ),
           ),
 
-          // Channel List
+          // Channel List Grouped by Discord Categories
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 8),
               children: [
-                // Quick Hub Action
+                // Quick Hub Actions
                 ListTile(
                   dense: true,
                   leading: const Icon(LucideIcons.calendar, size: 16, color: AppColors.primary),
@@ -293,45 +312,76 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                   title: const Text('Whiteboard', style: TextStyle(fontSize: 13, color: AppColors.textMain)),
                   onTap: _openWhiteboard,
                 ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Text('CHANNELS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textDim, letterSpacing: 0.5)),
-                ),
-                ...chatState.channels.map((ch) {
-                  final isSelected = ch.id == chatState.activeChannel?.id;
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.bgSurfaceHover : Colors.transparent,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: ListTile(
-                      dense: true,
-                      leading: Icon(
-                        LucideIcons.hash,
-                        size: 16,
-                        color: isSelected ? AppColors.primary : AppColors.textDim,
-                      ),
-                      title: Text(
-                        ch.name,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-                          color: isSelected ? AppColors.textMain : AppColors.textMuted,
+                const SizedBox(height: 6),
+
+                // Discord-Style Categories
+                for (final category in categories) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: Row(
+                      children: [
+                        const Icon(LucideIcons.chevronDown, size: 11, color: AppColors.textDim),
+                        const SizedBox(width: 4),
+                        Text(
+                          category,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textDim,
+                            letterSpacing: 0.6,
+                          ),
                         ),
-                      ),
-                      onTap: () {
-                        ref.read(chatProvider.notifier).selectChannel(ch);
-                        if (Scaffold.of(context).isDrawerOpen) {
-                          Navigator.pop(context);
-                        }
-                      },
+                      ],
                     ),
-                  );
-                }),
+                  ),
+                  ...chatState.channels.where((c) => c.category == category).map((ch) {
+                    final isSelected = ch.id == chatState.activeChannel?.id;
+                    IconData channelIcon;
+                    if (ch.type == 'voice') {
+                      channelIcon = LucideIcons.volume2;
+                    } else if (ch.category == 'CI & ALERTS') {
+                      channelIcon = LucideIcons.bot;
+                    } else if (ch.category == 'ANNOUNCEMENTS') {
+                      channelIcon = LucideIcons.megaphone;
+                    } else {
+                      channelIcon = LucideIcons.hash;
+                    }
+
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.bgSurfaceHover : Colors.transparent,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: ListTile(
+                        dense: true,
+                        leading: Icon(
+                          channelIcon,
+                          size: 15,
+                          color: isSelected ? AppColors.primary : AppColors.textDim,
+                        ),
+                        title: Text(
+                          ch.name,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                            color: isSelected ? AppColors.textMain : AppColors.textMuted,
+                          ),
+                        ),
+                        onTap: () {
+                          ref.read(chatProvider.notifier).selectChannel(ch);
+                          if (Scaffold.of(context).isDrawerOpen) {
+                            Navigator.pop(context);
+                          }
+                        },
+                      ),
+                    );
+                  }),
+                ],
               ],
             ),
           ),
+
 
           // Current User Profile Footer
           if (authState.user != null)

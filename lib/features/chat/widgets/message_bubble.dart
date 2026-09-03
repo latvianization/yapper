@@ -9,7 +9,9 @@ import 'package:yapper/features/auth/providers/auth_provider.dart';
 import 'package:yapper/features/chat/models/message_model.dart';
 import 'package:yapper/features/chat/providers/chat_provider.dart';
 import 'package:yapper/features/chat/widgets/custom_audio_player.dart';
+import 'package:yapper/features/chat/widgets/discord_embed_card.dart';
 import 'package:yapper/features/chat/widgets/event_card.dart';
+
 import 'package:yapper/features/chat/widgets/kudos_card.dart';
 import 'package:yapper/features/chat/widgets/poll_card.dart';
 import 'package:yapper/features/chat/widgets/task_checklist_card.dart';
@@ -86,9 +88,29 @@ class MessageBubble extends ConsumerWidget {
                         color: AppColors.textMain,
                       ),
                     ),
+                    if (message.isBot) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF5865F2), // Discord Blurple
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text(
+                          'BOT',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(width: 8),
                     Text(
                       Formatters.formatTime(message.createdAt),
+
                       style: const TextStyle(
                         fontSize: 11,
                         color: AppColors.textDim,
@@ -190,6 +212,12 @@ class MessageBubble extends ConsumerWidget {
                     event: message.eventCard!,
                     currentUserId: currentUserId,
                   ),
+
+                // Discord Rich Embeds (CI/CD Alerts, Webhook payloads)
+                for (final embed in message.embeds) ...[
+                  DiscordEmbedCard(embed: embed),
+                ],
+
 
                 // Emoji Reactions
                 if (message.reactions.isNotEmpty) ...[

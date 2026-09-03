@@ -1,0 +1,71 @@
+name: CI / CD Build & Test
+
+on:
+  push:
+    branches: [ main, staging ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.19.x'
+          channel: 'stable'
+
+      - name: Install Dependencies
+        run: flutter pub get
+
+      - name: Analyze & Test
+        run: |
+          flutter analyze
+          flutter test
+
+      # ── Notify Yapper Channel (Discord-Compatible Webhook) ────
+      - name: Notify Yapper on Success
+        if: success()
+        run: |
+          curl -X POST "${{ secrets.YAPPER_CI_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "username": "GitHub Actions",
+              "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              "content": "✅ **CI Succeeded**: Build #'${{ github.run_number }}' on `'${{ github.ref_name }}'`",
+              "embeds": [{
+                "title": "Tests & Analysis Passed",
+                "description": "All unit tests and static analysis passed successfully.",
+                "color": 65280,
+                "fields": [
+                  { "name": "Branch", "value": "`${{ github.ref_name }}`", "inline": true },
+                  { "name": "Author", "value": "${{ github.actor }}", "inline": true },
+                  { "name": "Commit", "value": "`${{ github.sha }}`", "inline": false }
+                ]
+              }]
+            }'
+
+      - name: Notify Yapper on Failure
+        if: failure()
+        run: |
+          curl -X POST "${{ secrets.YAPPER_CI_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "username": "GitHub Actions",
+              "avatar_url": "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png",
+              "content": "❌ **CI Failed**: Build #'${{ github.run_number }}' on `'${{ github.ref_name }}'`",
+              "embeds": [{
+                "title": "Build / Test Failure Detected",
+                "description": "Pipeline failed during static analysis or unit testing.",
+                "color": 16711680,
+                "fields": [
+                  { "name": "Branch", "value": "`${{ github.ref_name }}`", "inline": true },
+                  { "name": "Commit", "value": "`${{ github.sha }}`", "inline": true }
+                ]
+              }]
+            }'

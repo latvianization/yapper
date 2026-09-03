@@ -69,8 +69,15 @@ yapper/
 │       └── events/
 │           ├── models/event_model.dart
 │           └── views/events_hub_dialog.dart  # Company Events Hub directory
+├── server/
+│   └── api_server.js                   # Discord-compatible CI/CD Webhooks & Channel REST API
+├── scripts/
+│   └── ci_webhook_demo.sh              # CI webhook test & simulation script
+├── .github/workflows/
+│   └── ci_notification.yml             # GitHub Actions automated build notification
 └── js/, css/, index.html               # Legacy Vue 3 web prototype (preserved)
 ```
+
 
 ---
 

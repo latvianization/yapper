@@ -64,19 +64,53 @@ class ChatNotifier extends StateNotifier<ChatState> {
   void _initDemoData() {
     final defaultChannels = [
       const ChannelModel(
+        id: 'announcements',
+        name: 'announcements',
+        category: 'ANNOUNCEMENTS',
+        type: 'announcement',
+        topic: 'Company-wide updates, roadmap releases, and executive announcements',
+      ),
+      const ChannelModel(
         id: 'general',
         name: 'general',
-        description: 'Company-wide updates, chatter, and announcements',
+        category: 'TEXT CHANNELS',
+        type: 'text',
+        topic: 'General team discussion, chatter, and watercooler talk',
       ),
       const ChannelModel(
         id: 'engineering',
         name: 'engineering',
-        description: 'Code architecture, deploys, pull requests, and bug reports',
+        category: 'TEXT CHANNELS',
+        type: 'text',
+        topic: 'Code architecture, deploys, pull requests, and bug triage',
+      ),
+      const ChannelModel(
+        id: 'ci-builds',
+        name: 'ci-builds',
+        category: 'CI & ALERTS',
+        type: 'text',
+        topic: 'Automated CI/CD build statuses & GitHub Actions deployment webhooks',
+      ),
+      const ChannelModel(
+        id: 'sentry-alerts',
+        name: 'sentry-alerts',
+        category: 'CI & ALERTS',
+        type: 'text',
+        topic: 'Real-time production exception alerts & error crash tracing',
       ),
       const ChannelModel(
         id: 'random',
         name: 'random',
-        description: 'Memes, watercooler chats, music, and casual hangouts',
+        category: 'TEXT CHANNELS',
+        type: 'text',
+        topic: 'Memes, music, gaming, and casual hangouts',
+      ),
+      const ChannelModel(
+        id: 'voice-stage',
+        name: 'voice-stage',
+        category: 'VOICE & HUDDLES',
+        type: 'voice',
+        topic: 'Drop-in live audio stage and community huddle',
       ),
     ];
 
@@ -106,7 +140,37 @@ class ChatNotifier extends StateNotifier<ChatState> {
           ]
         },
       ),
+      MessageModel(
+        id: _uuid.v4(),
+        channelId: 'ci-builds',
+        senderId: 'webhook_github',
+        senderName: 'GitHub Actions',
+        senderPhotoUrl: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+        isBot: true,
+        text: '🚀 **Deployment Alert**: Build #142 on branch `main` completed with status: **SUCCESS**',
+        createdAt: DateTime.now().subtract(const Duration(minutes: 10)),
+        embeds: [
+          {
+            'title': 'CI Pipeline Succeeded: Build #142',
+            'description': 'All unit tests, static analysis, and multiplatform builds passed without errors.',
+            'url': 'https://github.com/your-org/yapper/actions/runs/142',
+            'color': 65280, // Green
+            'fields': [
+              {'name': 'Branch', 'value': '`main`', 'inline': true},
+              {'name': 'Commit', 'value': '`a8f23bc`', 'inline': true},
+              {'name': 'Triggered By', 'value': 'Push to `main`', 'inline': true},
+              {'name': 'Environment', 'value': 'Production (Web, Android, iOS, Desktop)', 'inline': false},
+            ],
+            'footer': {
+              'text': 'Yapper CI/CD Integration',
+              'iconUrl': 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
+            },
+            'timestamp': DateTime.now().subtract(const Duration(minutes: 10)).toIso8601String(),
+          }
+        ],
+      ),
     ];
+
 
     state = state.copyWith(
       channels: defaultChannels,

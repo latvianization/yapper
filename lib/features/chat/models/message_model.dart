@@ -4,11 +4,13 @@ class MessageModel {
   final String senderId;
   final String senderName;
   final String senderPhotoUrl;
+  final bool isBot;
   final String text;
   final DateTime createdAt;
   final bool isE2EE;
   final String? encryptedPayload;
   final List<Map<String, dynamic>> attachments;
+  final List<Map<String, dynamic>> embeds; // Discord rich embeds
   final Map<String, List<String>> reactions; // emoji -> list of userIds
   final Map<String, dynamic>? replyTo;
   final Map<String, dynamic>? kudos;
@@ -23,11 +25,13 @@ class MessageModel {
     required this.senderId,
     required this.senderName,
     this.senderPhotoUrl = '',
+    this.isBot = false,
     required this.text,
     required this.createdAt,
     this.isE2EE = false,
     this.encryptedPayload,
     this.attachments = const [],
+    this.embeds = const [],
     this.reactions = const {},
     this.replyTo,
     this.kudos,
@@ -43,11 +47,13 @@ class MessageModel {
     String? senderId,
     String? senderName,
     String? senderPhotoUrl,
+    bool? isBot,
     String? text,
     DateTime? createdAt,
     bool? isE2EE,
     String? encryptedPayload,
     List<Map<String, dynamic>>? attachments,
+    List<Map<String, dynamic>>? embeds,
     Map<String, List<String>>? reactions,
     Map<String, dynamic>? replyTo,
     Map<String, dynamic>? kudos,
@@ -62,11 +68,13 @@ class MessageModel {
       senderId: senderId ?? this.senderId,
       senderName: senderName ?? this.senderName,
       senderPhotoUrl: senderPhotoUrl ?? this.senderPhotoUrl,
+      isBot: isBot ?? this.isBot,
       text: text ?? this.text,
       createdAt: createdAt ?? this.createdAt,
       isE2EE: isE2EE ?? this.isE2EE,
       encryptedPayload: encryptedPayload ?? this.encryptedPayload,
       attachments: attachments ?? this.attachments,
+      embeds: embeds ?? this.embeds,
       reactions: reactions ?? this.reactions,
       replyTo: replyTo ?? this.replyTo,
       kudos: kudos ?? this.kudos,
@@ -84,6 +92,7 @@ class MessageModel {
       senderId: json['senderId'] as String? ?? '',
       senderName: json['senderName'] as String? ?? 'Teammate',
       senderPhotoUrl: json['senderPhotoUrl'] as String? ?? '',
+      isBot: json['isBot'] as bool? ?? false,
       text: json['text'] as String? ?? '',
       createdAt: json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
@@ -91,6 +100,7 @@ class MessageModel {
       isE2EE: json['isE2EE'] as bool? ?? false,
       encryptedPayload: json['encryptedPayload'] as String?,
       attachments: List<Map<String, dynamic>>.from(json['attachments'] ?? []),
+      embeds: List<Map<String, dynamic>>.from(json['embeds'] ?? []),
       reactions: Map<String, List<String>>.from(
         (json['reactions'] as Map? ?? {}).map(
           (k, v) => MapEntry(k.toString(), List<String>.from(v ?? [])),
@@ -112,11 +122,13 @@ class MessageModel {
       'senderId': senderId,
       'senderName': senderName,
       'senderPhotoUrl': senderPhotoUrl,
+      'isBot': isBot,
       'text': text,
       'createdAt': createdAt.toIso8601String(),
       'isE2EE': isE2EE,
       if (encryptedPayload != null) 'encryptedPayload': encryptedPayload,
       'attachments': attachments,
+      'embeds': embeds,
       'reactions': reactions,
       if (replyTo != null) 'replyTo': replyTo,
       if (kudos != null) 'kudos': kudos,
