@@ -1,0 +1,1182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Yapper — Modern Internal Team Chat &amp; Events</title>
+  <meta name="description" content="Ultra-fast, modern company internal chat with Discord-style scheduled events, voice-to-text, video snippets, soundboard, whiteboard diagrams, E2EE, and tasks.">
+
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- PWA Manifest (Only on http/https to prevent file:// CORS error) -->
+  <script>
+    if (window.location.protocol.startsWith('http')) {
+      const link = document.createElement('link');
+      link.rel = 'manifest';
+      link.href = 'manifest.json';
+      document.head.appendChild(link);
+    }
+  </script>
+
+  <!-- Vue 3 & Firebase Compat SDKs -->
+  <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+</head>
+<body>
+<div id="app" v-cloak>
+
+  <!-- Guest / Auth Welcome Screen -->
+  <div v-if="!currentUser" class="modal-overlay" style="background: var(--bg-main);">
+    <div class="modal-dialog-box" style="max-width: 440px; text-align: center; padding: 32px 28px;">
+      <div class="company-icon mx-auto mb-3" style="width: 58px; height: 58px; font-size: 1.6rem; margin: 0 auto 18px auto;">
+        <i class="fa-solid fa-bolt"></i>
+      </div>
+      <h2 style="font-size: 1.55rem; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.5px;">Welcome to Yapper</h2>
+      <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 26px;">
+        Next-gen company chat with Discord-style events, voice transcription, E2EE secret DMs, audio huddles, and whiteboard.
+      </p>
+
+      <div style="display: flex; flex-direction: column; gap: 12px;">
+        <button class="btn btn-primary" style="width: 100%; padding: 12px;" @click="loginAsDemoUser('founder')">
+          <i class="fa-solid fa-bolt"></i> Quick Demo (Founder / Alice)
+        </button>
+        <button class="btn btn-secondary" style="width: 100%; padding: 12px;" @click="loginAsDemoUser('engineer')">
+          <i class="fa-solid fa-user-gear"></i> Quick Demo (Teammate / Bob)
+        </button>
+
+        <div style="display: flex; align-items: center; margin: 8px 0; color: var(--text-dim); font-size: 0.76rem;">
+          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+          <span style="padding: 0 12px; letter-spacing: 0.5px;">OR FIREBASE ACCOUNT</span>
+          <div style="flex: 1; height: 1px; background: var(--border-color);"></div>
+        </div>
+
+        <button class="btn btn-secondary" style="width: 100%;" @click="handleGoogleSignIn">
+          <i class="fa-brands fa-google"></i> Sign In with Google
+        </button>
+
+        <button class="btn btn-secondary" style="width: 100%;" @click="activeModal = 'auth'">
+          <i class="fa-solid fa-envelope"></i> Sign In / Register with Email
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Authenticated App Layout -->
+  <div v-else class="app-wrapper">
+
+    <!-- Mobile Drawer Backdrop -->
+    <div v-if="isSidebarOpen" class="sidebar-backdrop" @click="isSidebarOpen = false"></div>
+
+    <!-- ── SIDEBAR ──────────────────────────────────────────────── -->
+    <aside class="app-sidebar" :class="{ 'sidebar-open': isSidebarOpen }">
+
+      <!-- Workspace Header -->
+      <div class="sidebar-header">
+        <div class="company-badge" @click="handleCompanyBadgeClick" :title="isOwnerOrAdmin ? 'Manage Workspace & Invites' : (currentCompany ? currentCompany.name : '')">
+          <div class="company-icon">
+            {{ currentCompany ? currentCompany.name.charAt(0).toUpperCase() : 'Y' }}
+          </div>
+          <div class="company-info">
+            <span class="company-name">{{ currentCompany ? currentCompany.name : 'Personal Workspace' }}</span>
+            <span class="company-role">{{ currentUser.role || 'Member' }}</span>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <!-- Kudos Leaderboard Button -->
+          <button class="icon-btn" @click="openKudosLeaderboardModal" title="Kudos Leaderboard">
+            <i class="fa-solid fa-trophy text-warning"></i>
+          </button>
+          <!-- Workspace Audit Trail (Admin) -->
+          <button v-if="isOwnerOrAdmin" class="icon-btn" @click="openAuditModal" title="Workspace Governance & Audit Log">
+            <i class="fa-solid fa-shield-halved"></i>
+          </button>
+          <!-- Invite Button -->
+          <button v-if="isOwnerOrAdmin" class="icon-btn" @click="activeModal = 'invite'" title="Invite Teammates">
+            <i class="fa-solid fa-user-plus"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Command Palette Search Trigger Button (Cmd+K) -->
+      <div class="sidebar-search-box">
+        <button class="cmd-search-trigger" @click="isCommandPaletteOpen = true" title="Open Command Palette (Cmd+K)">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <span>Search or jump to...</span>
+          </div>
+          <span class="kbd-shortcut">⌘K</span>
+        </button>
+      </div>
+
+      <!-- Navigation & Lists -->
+      <div class="sidebar-scroll">
+
+        <!-- Company Events Button (Discord-style) -->
+        <div class="nav-section">
+          <div 
+            class="nav-item" 
+            :class="{ active: activeChat?.type === 'event' || activeModal === 'eventsHub' }"
+            @click="activeModal = 'eventsHub'"
+          >
+            <div class="nav-item-left">
+              <i class="fa-solid fa-calendar-days nav-icon text-primary"></i>
+              <span class="nav-label" style="font-weight: 700;">Events</span>
+            </div>
+            <span v-if="companyEvents.length" class="badge" style="font-size: 0.7rem; background: var(--primary); color: #fff; padding: 2px 7px; border-radius: 99px;">
+              {{ companyEvents.length }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Saved / Bookmarks -->
+        <div class="nav-section">
+          <div 
+            class="nav-item" 
+            :class="{ active: isViewingBookmarks }"
+            @click="openBookmarksView"
+          >
+            <div class="nav-item-left">
+              <i class="fa-solid fa-bookmark nav-icon text-warning"></i>
+              <span class="nav-label">Saved Messages</span>
+            </div>
+            <span v-if="bookmarks.length" class="badge" style="font-size: 0.7rem; background: var(--bg-surface-2); padding: 2px 7px; border-radius: 99px;">
+              {{ bookmarks.length }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Favorites Section -->
+        <div v-if="favoritesList.length > 0" class="nav-section">
+          <div class="section-header">
+            <span><i class="fa-solid fa-star text-warning me-1"></i> Favorites</span>
+          </div>
+          <div 
+            v-for="user in favoritesList" 
+            :key="user.uid" 
+            class="nav-item" 
+            :class="{ active: !isViewingBookmarks && activeChat?.type === 'direct' && activeChat?.raw?.uid === user.uid }"
+            @click="selectDirectChat(user)"
+          >
+            <div class="nav-item-left">
+              <user-avatar :user="user" size="sm"></user-avatar>
+              <span class="nav-label">{{ user.displayName || user.email }}</span>
+            </div>
+            <button class="fav-btn is-fav" @click.stop="toggleFavorite(user.uid)" title="Remove from favorites">
+              <i class="fa-solid fa-star"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Channels (Company Groups) -->
+        <div class="nav-section">
+          <div class="section-header">
+            <span>Channels</span>
+            <button class="section-btn" @click="activeModal = 'channel'" title="Create Channel">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+          <div 
+            v-for="channel in filteredChannels" 
+            :key="channel.id" 
+            class="nav-item" 
+            :class="{ active: !isViewingBookmarks && activeChat?.type === 'channel' && activeChat?.id === channel.id }"
+            @click="selectChannel(channel)"
+          >
+            <div class="nav-item-left">
+              <i class="fa-solid fa-hashtag nav-icon"></i>
+              <span class="nav-label">{{ channel.name }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Personal Custom Groups -->
+        <div class="nav-section">
+          <div class="section-header">
+            <span>Custom Groups</span>
+            <button class="section-btn" @click="openCreatePersonalGroupModal" title="New Custom Group">
+              <i class="fa-solid fa-plus"></i>
+            </button>
+          </div>
+          <div 
+            v-for="grp in personalGroups" 
+            :key="grp.id" 
+            class="nav-item" 
+            :class="{ active: !isViewingBookmarks && activeChat?.type === 'group' && activeChat?.id === 'pgrp_' + grp.id }"
+            @click="selectPersonalGroup(grp)"
+          >
+            <div class="nav-item-left">
+              <i class="fa-solid fa-users nav-icon text-accent"></i>
+              <span class="nav-label">{{ grp.name }}</span>
+            </div>
+            <button class="section-btn" @click.stop="deletePersonalGroup(grp.id)" title="Delete group">
+              <i class="fa-solid fa-trash-can" style="font-size: 0.72rem;"></i>
+            </button>
+          </div>
+          <div v-if="personalGroups.length === 0" style="padding: 4px 10px; font-size: 0.76rem; color: var(--text-dim);">
+            No custom groups yet.
+          </div>
+        </div>
+
+        <!-- Direct Messages / All Company Users -->
+        <div class="nav-section">
+          <div class="section-header">
+            <span>Direct Messages ({{ filteredDirectUsers.length }})</span>
+          </div>
+          <div 
+            v-for="user in filteredDirectUsers" 
+            :key="user.uid" 
+            class="nav-item" 
+            :class="{ active: !isViewingBookmarks && activeChat?.type === 'direct' && activeChat?.raw?.uid === user.uid }"
+            @click="selectDirectChat(user)"
+          >
+            <div class="nav-item-left">
+              <user-avatar :user="user" size="sm"></user-avatar>
+              <span class="nav-label">{{ user.displayName || user.email }}</span>
+            </div>
+            <button 
+              class="fav-btn" 
+              :class="{ 'is-fav': isUserFavorite(user.uid) }"
+              @click.stop="toggleFavorite(user.uid)" 
+              :title="isUserFavorite(user.uid) ? 'Remove favorite' : 'Add to favorites'"
+            >
+              <i class="fa-solid fa-star"></i>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Sidebar Footer (User Profile & Actions) -->
+      <div class="sidebar-footer">
+        <button class="current-user-btn" @click="openProfileModal" title="Edit Profile & Status">
+          <user-avatar :user="currentUser" size="sm"></user-avatar>
+          <div class="current-user-info">
+            <span class="current-user-name">{{ currentUser.displayName || currentUser.email }}</span>
+            <span class="current-user-status">{{ currentUser.statusMessage || currentUser.status || 'Online' }}</span>
+          </div>
+        </button>
+
+        <div class="footer-actions">
+          <button class="icon-btn" @click="toggleTheme" :title="theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'">
+            <i class="fa-solid" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
+          </button>
+          <button class="icon-btn" @click="toggleAudio" :title="audioEnabled ? 'Mute Sounds' : 'Unmute Sounds'">
+            <i class="fa-solid" :class="audioEnabled ? 'fa-volume-high' : 'fa-volume-xmark'"></i>
+          </button>
+          <button class="icon-btn" @click="toggleNotifs" :title="notifsEnabled ? 'Disable Notifications' : 'Enable Notifications'">
+            <i class="fa-solid" :class="notifsEnabled ? 'fa-bell' : 'fa-bell-slash'"></i>
+          </button>
+          <button class="icon-btn" @click="handleSignOut" title="Sign Out">
+            <i class="fa-solid fa-arrow-right-from-bracket"></i>
+          </button>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- ── MAIN CHAT AREA ───────────────────────────────────────── -->
+    <main class="chat-main-area">
+
+      <!-- Floating Frosted Header -->
+      <header class="chat-header">
+        <div class="chat-header-info">
+          <button class="icon-btn mobile-nav-toggle me-2" @click="isSidebarOpen = true">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+
+          <div v-if="activeChat">
+            <div class="chat-title">
+              <i v-if="activeChat.type === 'channel'" class="fa-solid fa-hashtag text-dim"></i>
+              <i v-else-if="activeChat.type === 'event'" class="fa-solid fa-calendar-star text-primary"></i>
+              <i v-else-if="activeChat.type === 'group'" class="fa-solid fa-users text-accent"></i>
+              <i v-else-if="activeChat.type === 'bookmarks'" class="fa-solid fa-bookmark text-warning"></i>
+              <user-avatar v-else-if="activeChat.targetUser" :user="activeChat.targetUser" size="sm"></user-avatar>
+              <span>{{ activeChat.name }}</span>
+            </div>
+            <div class="chat-subtitle">{{ activeChat.subtitle }}</div>
+          </div>
+          <div v-else class="chat-title">
+            <span>Welcome to Yapper</span>
+          </div>
+        </div>
+
+        <div class="chat-header-actions" v-if="activeChat && !isViewingBookmarks">
+          <!-- E2EE Direct Secret Toggle -->
+          <button 
+            v-if="activeChat.type === 'direct'" 
+            class="icon-btn" 
+            :class="{ active: isE2EEActive }"
+            @click="toggleE2EE"
+            :title="isE2EEActive ? 'Disable E2EE Secret Chat' : 'Enable E2EE Secret Chat (AES-GCM 256-bit)'"
+          >
+            <i class="fa-solid" :class="isE2EEActive ? 'fa-lock text-warning' : 'fa-lock-open text-dim'"></i>
+          </button>
+
+          <!-- E2EE Safety Number Fingerprint -->
+          <button 
+            v-if="activeChat.type === 'direct' && isE2EEActive" 
+            class="icon-btn" 
+            @click="openE2EEVerifyModal"
+            title="View Safety Fingerprint"
+          >
+            <i class="fa-solid fa-fingerprint text-warning"></i>
+          </button>
+
+          <!-- Award Peer Kudos Button -->
+          <button class="icon-btn" @click="openKudosModal" title="Award Peer Kudos Badge">
+            <i class="fa-solid fa-award text-warning"></i>
+          </button>
+
+          <!-- WebRTC Audio Huddle Button -->
+          <button 
+            v-if="(activeChat.type === 'channel' || activeChat.type === 'event') && !inHuddle" 
+            class="btn btn-secondary" 
+            style="font-size: 0.8rem; padding: 5px 12px; gap: 6px;" 
+            @click="joinHuddle"
+            title="Drop into stage voice room"
+          >
+            <i class="fa-solid fa-headphones text-accent"></i> Stage Voice
+          </button>
+
+          <!-- Interactive Whiteboard Button -->
+          <button class="icon-btn" @click="activeModal = 'whiteboard'" title="Open Whiteboard & Diagrammer">
+            <i class="fa-solid fa-paintbrush"></i>
+          </button>
+
+          <!-- Channel Analytics & Sentiment Button -->
+          <button class="icon-btn" @click="openAnalyticsModal" title="Channel Activity & Sentiment Analytics">
+            <i class="fa-solid fa-chart-pie"></i>
+          </button>
+
+          <!-- In-Chat Search Filter Toggle -->
+          <button class="icon-btn" :class="{ active: showInChatSearch }" @click="showInChatSearch = !showInChatSearch" title="Filter Messages">
+            <i class="fa-solid fa-filter"></i>
+          </button>
+
+          <!-- Create Poll Button -->
+          <button class="icon-btn" @click="openPollModal" title="Create Poll">
+            <i class="fa-solid fa-chart-simple"></i>
+          </button>
+
+          <!-- Export History -->
+          <button class="icon-btn" @click="exportChat('md')" title="Export Chat (.md)">
+            <i class="fa-solid fa-download"></i>
+          </button>
+
+          <!-- Media Gallery Drawer Toggle -->
+          <button class="icon-btn" :class="{ active: isDrawerOpen }" @click="isDrawerOpen = !isDrawerOpen" title="Channel Files & Media">
+            <i class="fa-solid fa-folder-open"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Discord-style LIVE Event Banner -->
+      <div v-if="activeLiveEvent" class="live-event-banner">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="badge badge-live fa-beat">🔴 LIVE EVENT</span>
+          <strong style="color: #ffffff; font-size: 0.92rem;">{{ activeLiveEvent.title }}</strong>
+          <span style="font-size: 0.78rem; color: rgba(255, 255, 255, 0.8);">Hosted by {{ activeLiveEvent.hostName }}</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn btn-primary" style="padding: 4px 12px; font-size: 0.78rem;" @click="selectEventChat(activeLiveEvent)">
+            <i class="fa-solid fa-comments me-1"></i> Join Event Chat
+          </button>
+          <button v-if="!inHuddle" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.78rem; background: rgba(0,0,0,0.4);" @click="joinHuddle">
+            <i class="fa-solid fa-headphones text-accent me-1"></i> Join Stage Voice
+          </button>
+        </div>
+      </div>
+
+      <!-- WebRTC Audio Huddle Active Bar -->
+      <div v-if="inHuddle" class="huddle-banner">
+        <div class="huddle-participants">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <i class="fa-solid fa-headphones text-accent fa-beat-fade"></i>
+            <span style="font-weight: 700; font-size: 0.85rem; color: #ffffff;">Live Huddle ({{ huddleParticipants.length || 1 }})</span>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: 6px; margin-left: 14px;">
+            <div v-for="part in huddleParticipants" :key="part.uid" class="huddle-avatar speaking">
+              <user-avatar :user="part" size="sm" :show-status="false"></user-avatar>
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.78rem;" @click="toggleMute">
+            <i class="fa-solid" :class="isMuted ? 'fa-microphone-slash text-danger' : 'fa-microphone text-success'"></i>
+            {{ isMuted ? 'Muted' : 'Mute' }}
+          </button>
+
+          <button class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.78rem;" @click="toggleScreenShare">
+            <i class="fa-solid fa-display" :class="{ 'text-primary': isScreenSharing }"></i>
+            {{ isScreenSharing ? 'Stop Share' : 'Share Screen' }}
+          </button>
+
+          <button class="btn btn-danger" style="padding: 4px 10px; font-size: 0.78rem;" @click="leaveHuddle">
+            <i class="fa-solid fa-phone-slash"></i> Leave
+          </button>
+        </div>
+      </div>
+
+      <!-- Pinned Messages Banner -->
+      <div v-if="pinnedMessages.length > 0 && !isViewingBookmarks" class="pinned-banner" @click="scrollToFirstPinned">
+        <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+          <i class="fa-solid fa-thumbtack"></i>
+          <span><strong>Pinned:</strong> {{ pinnedMessages[0].text || '[Attachment]' }}</span>
+        </div>
+        <span style="font-size: 0.75rem; text-decoration: underline;">Jump to message</span>
+      </div>
+
+      <!-- In-Chat Search Bar -->
+      <div v-if="showInChatSearch" style="padding: 8px 20px; background: var(--bg-surface-1); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; gap: 10px;">
+        <i class="fa-solid fa-filter text-dim"></i>
+        <input 
+          type="text" 
+          v-model="inChatSearchQuery" 
+          placeholder="Filter messages (e.g. text or has:image, has:event, has:file)..." 
+          class="form-control" 
+          style="padding: 5px 12px; font-size: 0.82rem;"
+        />
+        <button class="icon-btn" style="width: 24px; height: 24px;" @click="inChatSearchQuery = ''; showInChatSearch = false;">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <!-- Messages Feed (with Shimmer Skeleton Loading) -->
+      <div class="messages-container" id="messagesScroll">
+        <!-- Skeleton Loading Screen -->
+        <skeleton-chat v-if="isLoadingChat"></skeleton-chat>
+
+        <!-- Empty Chat State with Adaptive Quick-Start Cards -->
+        <div v-else-if="displayMessages.length === 0" class="empty-chat-state">
+          <div class="empty-chat-hero" style="width: 64px; height: 64px; font-size: 1.8rem; margin: 20px auto 14px auto; background: var(--bg-surface-2); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--primary);">
+            <i class="fa-solid fa-comments"></i>
+          </div>
+          <div style="text-align: center;">
+            <h3 style="font-weight: 700; font-size: 1.15rem; color: var(--text-main); margin-bottom: 4px;">
+              {{ isViewingBookmarks ? 'No saved messages' : 'Welcome to ' + (activeChat ? activeChat.name : 'this conversation') }}
+            </h3>
+            <p style="font-size: 0.86rem; color: var(--text-muted); max-width: 420px; margin: 0 auto;">
+              {{ isViewingBookmarks ? 'Bookmark important messages across channels with 1 click to surface them here.' : 'Start the conversation or choose a quick action below.' }}
+            </p>
+          </div>
+
+          <!-- Adaptive Quick-Start Cards -->
+          <div v-if="!isViewingBookmarks" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-top: 24px;">
+            <div class="task-item-row" style="flex-direction: column; align-items: center; padding: 14px 10px; text-align: center;" @click="handleQuickAction('say-hello')">
+              <i class="fa-solid fa-hand text-primary" style="font-size: 1.2rem; margin-bottom: 6px;"></i>
+              <strong>Say Hello</strong>
+              <div style="font-size: 0.72rem; color: var(--text-dim);">Send a greeting</div>
+            </div>
+            <div class="task-item-row" style="flex-direction: column; align-items: center; padding: 14px 10px; text-align: center;" @click="handleQuickAction('schedule-event')">
+              <i class="fa-solid fa-calendar-plus text-accent" style="font-size: 1.2rem; margin-bottom: 6px;"></i>
+              <strong>Schedule Event</strong>
+              <div style="font-size: 0.72rem; color: var(--text-dim);">Town hall or demo</div>
+            </div>
+            <div class="task-item-row" style="flex-direction: column; align-items: center; padding: 14px 10px; text-align: center;" @click="handleQuickAction('give-kudos')">
+              <i class="fa-solid fa-award text-warning" style="font-size: 1.2rem; margin-bottom: 6px;"></i>
+              <strong>Give Kudos</strong>
+              <div style="font-size: 0.72rem; color: var(--text-dim);">Praise a teammate</div>
+            </div>
+            <div class="task-item-row" style="flex-direction: column; align-items: center; padding: 14px 10px; text-align: center;" @click="handleQuickAction('start-poll')">
+              <i class="fa-solid fa-chart-simple text-success" style="font-size: 1.2rem; margin-bottom: 6px;"></i>
+              <strong>Create Poll</strong>
+              <div style="font-size: 0.72rem; color: var(--text-dim);">Gather quick feedback</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Rendered Message Bubbles -->
+        <template v-else>
+          <message-bubble 
+            v-for="msg in displayMessages" 
+            :key="msg.id" 
+            :message="msg" 
+            :current-user-id="currentUser.uid"
+            :is-bookmarked="isMessageBookmarked(msg.id)"
+            @open-lightbox="lightboxImage = $event"
+            @reply="handleReplyTo"
+            @react="handleReact"
+            @edit="handleEditMessage"
+            @delete="handleDeleteMessage"
+            @toggle-pin="handleTogglePin"
+            @toggle-bookmark="toggleBookmark"
+            @vote-poll="handleVotePoll"
+            @toggle-task="handleToggleTask"
+            @rsvp-event="handleRsvpEvent"
+            @open-event-chat="selectEventChat"
+            @scroll-to-message="scrollToMessage"
+          ></message-bubble>
+        </template>
+      </div>
+
+      <!-- Chat Input Container -->
+      <footer class="chat-input-container" v-if="activeChat && !isViewingBookmarks">
+        <!-- Active Quoted Reply Banner -->
+        <div v-if="activeReply" class="active-reply-banner">
+          <div style="display: flex; align-items: center; gap: 8px; overflow: hidden;">
+            <i class="fa-solid fa-reply text-primary"></i>
+            <span>Replying to <strong>{{ activeReply.senderName }}</strong>: {{ activeReply.text.substring(0, 60) }}...</span>
+          </div>
+          <button class="icon-btn" style="width: 22px; height: 22px;" @click="activeReply = null">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        <!-- @Mention Autocomplete Popup -->
+        <div v-if="showMentionPopup && filteredMentionUsers.length" class="mention-popup" style="position: absolute; bottom: 80px; left: 24px; background: var(--bg-surface-2); border: 1px solid var(--border-highlight); border-radius: 8px; padding: 6px; display: flex; flex-direction: column; gap: 4px; z-index: 45;">
+          <div 
+            v-for="u in filteredMentionUsers" 
+            :key="u.uid" 
+            class="task-item-row"
+            @click="insertMention(u)"
+          >
+            <user-avatar :user="u" size="sm" :show-status="false"></user-avatar>
+            <span>{{ u.displayName || u.email }}</span>
+          </div>
+        </div>
+
+        <!-- Staged Attachments Preview -->
+        <div v-if="stagedAttachments.length > 0" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;">
+          <div v-for="(att, idx) in stagedAttachments" :key="idx" class="badge" style="background: var(--bg-surface-2); border: 1px solid var(--border-color); padding: 4px 8px; display: flex; align-items: center; gap: 6px;">
+            <i v-if="att.type === 'image'" class="fa-solid fa-image text-primary"></i>
+            <i v-else-if="att.type === 'video'" class="fa-solid fa-video text-danger"></i>
+            <i v-else-if="att.type === 'audio'" class="fa-solid fa-microphone text-warning"></i>
+            <i v-else class="fa-solid fa-file text-dim"></i>
+            <span>{{ att.name }}</span>
+            <button @click="removeStagedAttachment(idx)" title="Remove attachment">
+              <i class="fa-solid fa-xmark" style="font-size: 0.7rem; margin-left: 4px;"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Soundboard Popover Menu -->
+        <div v-if="showSoundboardMenu" class="soundboard-popover">
+          <button 
+            v-for="snd in CONSTANTS.SOUNDBOARD_EFFECTS" 
+            :key="snd.id" 
+            class="soundboard-btn"
+            @click="triggerSoundboard(snd.id)"
+          >
+            <i class="fa-solid" :class="snd.icon"></i>
+            <span>{{ snd.name }}</span>
+          </button>
+        </div>
+
+        <!-- Voice Recording Active UI (with live Speech-to-Text) -->
+        <div v-if="isRecording" class="voice-recording-bar">
+          <div class="recording-indicator">
+            <div class="recording-dot"></div>
+            <span>Recording Voice Memo ({{ formatDuration(recordingDuration) }})...</span>
+            <span v-if="liveTranscript" style="font-size: 0.78rem; color: var(--text-main); font-weight: normal; margin-left: 10px;">
+              🗣️ <em>"{{ liveTranscript }}"</em>
+            </span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <button type="button" class="btn btn-secondary" style="padding: 4px 10px; font-size: 0.78rem;" @click="cancelVoiceRecording">
+              Cancel
+            </button>
+            <button type="button" class="btn btn-primary" style="padding: 4px 12px; font-size: 0.78rem;" @click="stopAndSendVoiceRecording">
+              <i class="fa-solid fa-paper-plane"></i> Send Memo
+            </button>
+          </div>
+        </div>
+
+        <!-- Normal Input Form -->
+        <form v-else class="chat-input-form" @submit.prevent="sendMessage">
+          <!-- Attachment Button -->
+          <label class="icon-btn" style="cursor: pointer;" title="Attach file or media">
+            <i class="fa-solid fa-paperclip"></i>
+            <input 
+              type="file" 
+              multiple 
+              accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.zip,.txt" 
+              style="display: none;" 
+              @change="handleFileSelect"
+            />
+          </label>
+
+          <!-- Voice Note Record Button -->
+          <button 
+            type="button" 
+            class="icon-btn" 
+            @click="startVoiceRecording"
+            title="Record Voice Memo (Live Transcription)"
+          >
+            <i class="fa-solid fa-microphone"></i>
+          </button>
+
+          <!-- Quick Video Snippet Button -->
+          <button 
+            type="button" 
+            class="icon-btn" 
+            @click="activeModal = 'videoRecord'"
+            title="Record Quick Video Snippet"
+          >
+            <i class="fa-solid fa-video"></i>
+          </button>
+
+          <!-- Soundboard Toggle Button -->
+          <button 
+            type="button" 
+            class="icon-btn" 
+            :class="{ active: showSoundboardMenu }"
+            @click="showSoundboardMenu = !showSoundboardMenu"
+            title="Open Soundboard"
+          >
+            <i class="fa-solid fa-bullhorn"></i>
+          </button>
+
+          <!-- Ephemeral Self-Destruct Timer Dropdown -->
+          <select 
+            v-model="ephemeralDuration" 
+            class="badge" 
+            style="background: var(--bg-surface-2); border: 1px solid var(--border-color); color: var(--text-dim); padding: 4px 6px; cursor: pointer;"
+            title="Self-Destruct / Ephemeral Timer"
+          >
+            <option v-for="d in CONSTANTS.EPHEMERAL_DURATIONS" :key="d.value" :value="d.value">
+              ⏳ {{ d.label }}
+            </option>
+          </select>
+
+          <!-- Emoji Picker Quick Bar -->
+          <button 
+            type="button" 
+            class="icon-btn" 
+            @click="addRandomEmoji"
+            title="Add quick emoji"
+          >
+            <i class="fa-regular fa-face-smile"></i>
+          </button>
+
+          <!-- Text Area Input -->
+          <textarea 
+            class="chat-textarea" 
+            v-model="messageText" 
+            :placeholder="isE2EEActive ? '🔒 Send encrypted secret message...' : ('Message ' + (activeChat ? activeChat.name : '') + '... (/event, /kudos, /standup, /todo, /poll)')" 
+            rows="1"
+            @input="handleTextInput"
+            @keydown.enter.exact.prevent="sendMessage"
+          ></textarea>
+
+          <!-- Send Button -->
+          <button 
+            type="submit" 
+            class="send-btn" 
+            :disabled="!messageText.trim() && stagedAttachments.length === 0"
+            title="Send (Enter)"
+          >
+            <i class="fa-solid fa-arrow-up"></i>
+          </button>
+        </form>
+      </footer>
+
+    </main>
+
+    <!-- ── RIGHT MEDIA & FILES DRAWER ───────────────────────────── -->
+    <aside v-if="isDrawerOpen && activeChat" class="chat-drawer" style="width: 290px; background: var(--bg-sidebar); border-left: 1px solid var(--border-color); display: flex; flex-direction: column; height: 100%;">
+      <div class="sidebar-header" style="justify-content: space-between;">
+        <span style="font-weight: 700; font-size: 0.95rem;">Files &amp; Media</span>
+        <button class="icon-btn" @click="isDrawerOpen = false"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <div class="sidebar-scroll">
+        <!-- Images -->
+        <div v-if="galleryItems.images.length > 0">
+          <h5 style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px;">
+            Photos ({{ galleryItems.images.length }})
+          </h5>
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+            <img 
+              v-for="(img, idx) in galleryItems.images" 
+              :key="idx" 
+              :src="img.url" 
+              style="width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 6px; cursor: pointer;"
+              @click="lightboxImage = img.url"
+            />
+          </div>
+        </div>
+
+        <!-- Videos -->
+        <div v-if="galleryItems.videos.length > 0">
+          <h5 style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px;">
+            Videos ({{ galleryItems.videos.length }})
+          </h5>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <video 
+              v-for="(vid, idx) in galleryItems.videos" 
+              :key="idx" 
+              :src="vid.url" 
+              controls 
+              style="width: 100%; border-radius: 6px;"
+            ></video>
+          </div>
+        </div>
+
+        <!-- Files & Documents -->
+        <div v-if="galleryItems.files.length > 0">
+          <h5 style="font-size: 0.76rem; font-weight: 700; text-transform: uppercase; color: var(--text-dim); margin-bottom: 8px;">
+            Documents ({{ galleryItems.files.length }})
+          </h5>
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <a 
+              v-for="(f, idx) in galleryItems.files" 
+              :key="idx" 
+              :href="f.url" 
+              target="_blank" 
+              class="file-attachment-card"
+            >
+              <i class="fa-solid fa-file-lines file-icon"></i>
+              <div class="file-details">
+                <span class="file-name">{{ f.name }}</span>
+              </div>
+            </a>
+          </div>
+        </div>
+
+        <div v-if="!galleryItems.images.length && !galleryItems.videos.length && !galleryItems.files.length" style="color: var(--text-dim); font-size: 0.85rem; text-align: center; margin-top: 40px;">
+          No media or attachments in this conversation yet.
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- ── GLOBAL COMMAND PALETTE (CMD+K) ────────────────────────── -->
+  <div v-if="isCommandPaletteOpen" class="cmd-palette-backdrop" @click="isCommandPaletteOpen = false">
+    <div class="cmd-palette-modal" @click.stop>
+      <div class="cmd-palette-header">
+        <i class="fa-solid fa-magnifying-glass text-dim"></i>
+        <input 
+          id="cmdPaletteInput"
+          type="text" 
+          v-model="commandSearchQuery" 
+          placeholder="Type a command or search (#channels, @people, /events)..." 
+          class="cmd-palette-input"
+        />
+        <span class="kbd-shortcut">ESC</span>
+      </div>
+      <div class="cmd-palette-list">
+        <div 
+          v-for="cmd in filteredCommands" 
+          :key="cmd.id" 
+          class="cmd-item"
+          @click="executeCommand(cmd)"
+        >
+          <div class="cmd-item-left">
+            <i :class="cmd.icon" class="text-primary"></i>
+            <span>{{ cmd.title }}</span>
+          </div>
+          <span style="font-size: 0.72rem; color: var(--text-dim); text-transform: uppercase; font-weight: 600;">{{ cmd.category }}</span>
+        </div>
+        <div v-if="filteredCommands.length === 0" style="padding: 16px; text-align: center; color: var(--text-dim); font-size: 0.85rem;">
+          No matching commands found.
+        </div>
+      </div>
+      <div class="cmd-palette-footer">
+        <span>Tip: Press <kbd class="kbd-shortcut">↑</kbd> <kbd class="kbd-shortcut">↓</kbd> to navigate</span>
+        <span>Yapper Fast Actions</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DISCORD-STYLE COMPANY EVENTS HUB MODAL ─────────────────── -->
+  <events-hub-modal 
+    v-if="activeModal === 'eventsHub'"
+    :events="companyEvents"
+    :current-user-id="currentUser.uid"
+    :is-host-or-admin="isOwnerOrAdmin"
+    @close="activeModal = null"
+    @create-event-click="activeModal = 'createEvent'"
+    @open-event-chat="selectEventChat"
+    @toggle-live="handleToggleLiveEvent"
+    @rsvp="handleRsvpEvent"
+  ></events-hub-modal>
+
+  <!-- ── SCHEDULE EVENT MODAL ──────────────────────────────────── -->
+  <create-event-modal 
+    v-if="activeModal === 'createEvent'"
+    @close="activeModal = null"
+    @save-event="handleSaveEvent"
+  ></create-event-modal>
+
+  <!-- ── PEER KUDOS AWARD MODAL ────────────────────────────────── -->
+  <kudos-modal 
+    v-if="activeModal === 'kudos'"
+    :users="directMessageUsers"
+    :current-user-id="currentUser.uid"
+    @close="activeModal = null"
+    @send-kudos="handleSendKudos"
+  ></kudos-modal>
+
+  <!-- ── KUDOS LEADERBOARD MODAL ───────────────────────────────── -->
+  <kudos-leaderboard-modal 
+    v-if="activeModal === 'kudosLeaderboard'"
+    :leaderboard="kudosLeaderboard"
+    @close="activeModal = null"
+  ></kudos-leaderboard-modal>
+
+  <!-- ── E2EE SAFETY NUMBER VERIFY MODAL ───────────────────────── -->
+  <e2ee-verify-modal 
+    v-if="activeModal === 'e2eeVerify'"
+    :peer-name="activeChat ? activeChat.name : 'Peer'"
+    :fingerprint="e2eeFingerprint"
+    @close="activeModal = null"
+  ></e2ee-verify-modal>
+
+  <!-- ── INTERACTIVE WHITEBOARD MODAL ──────────────────────────── -->
+  <whiteboard-modal 
+    v-if="activeModal === 'whiteboard'"
+    @close="activeModal = null"
+    @send-diagram="handleSendWhiteboardDiagram"
+  ></whiteboard-modal>
+
+  <!-- ── QUICK VIDEO SNIPPET RECORDER MODAL ────────────────────── -->
+  <video-record-modal 
+    v-if="activeModal === 'videoRecord'"
+    @close="activeModal = null"
+    @send-video="handleSendVideoSnippet"
+  ></video-record-modal>
+
+  <!-- ── CHANNEL ANALYTICS & SENTIMENT MODAL ──────────────────── -->
+  <analytics-modal 
+    v-if="activeModal === 'analytics'"
+    :channel-name="activeChat ? activeChat.name : ''"
+    :messages="messages"
+    @close="activeModal = null"
+  ></analytics-modal>
+
+  <!-- ── WORKSPACE AUDIT LOG & GOVERNANCE MODAL ────────────────── -->
+  <audit-log-modal 
+    v-if="activeModal === 'auditLog'"
+    :logs="auditLogsList"
+    @close="activeModal = null"
+  ></audit-log-modal>
+
+  <!-- ── OTHER MODALS ──────────────────────────────────────────── -->
+
+  <!-- Create Team Poll Modal -->
+  <div v-if="activeModal === 'poll'" class="modal-overlay">
+    <div class="modal-dialog-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Team Poll</h3>
+        <button class="icon-btn" @click="activeModal = null"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form @submit.prevent="handleCreatePoll">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Question</label>
+            <input 
+              type="text" 
+              v-model="pollForm.question" 
+              class="form-control" 
+              placeholder="e.g. Where should we do lunch? Or release date?" 
+              required 
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Options</label>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <div v-for="(opt, idx) in pollForm.options" :key="idx" style="display: flex; align-items: center; gap: 8px;">
+                <input 
+                  type="text" 
+                  v-model="pollForm.options[idx]" 
+                  class="form-control" 
+                  :placeholder="'Option ' + (idx + 1)" 
+                  required 
+                />
+                <button 
+                  v-if="pollForm.options.length > 2" 
+                  type="button" 
+                  class="icon-btn" 
+                  style="color: var(--danger);" 
+                  @click="removePollOption(idx)"
+                >
+                  <i class="fa-solid fa-trash-can"></i>
+                </button>
+              </div>
+            </div>
+
+            <button 
+              v-if="pollForm.options.length < 6" 
+              type="button" 
+              class="btn btn-secondary mt-2" 
+              style="font-size: 0.78rem; padding: 4px 10px; align-self: flex-start;" 
+              @click="addPollOption"
+            >
+              <i class="fa-solid fa-plus"></i> Add Option
+            </button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="activeModal = null">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="pollForm.isSubmitting">Publish Poll</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Company Workspace Modal -->
+  <div v-if="activeModal === 'createCompany'" class="modal-overlay">
+    <div class="modal-dialog-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Company Workspace</h3>
+        <button class="icon-btn" @click="activeModal = null"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form @submit.prevent="handleCreateCompany">
+        <div class="modal-body">
+          <p style="font-size: 0.88rem; color: var(--text-muted);">
+            Give your company or organization a name to set up your team chat channels.
+          </p>
+          <div class="form-group">
+            <label class="form-label">Company Name</label>
+            <input 
+              type="text" 
+              v-model="companyForm.name" 
+              class="form-control" 
+              placeholder="e.g. Acme Corp, Tech Innovators" 
+              required 
+            />
+          </div>
+          <div v-if="companyForm.error" style="color: var(--danger); font-size: 0.8rem;">
+            {{ companyForm.error }}
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="activeModal = null">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Workspace</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Invite Teammates Modal -->
+  <div v-if="activeModal === 'invite'" class="modal-overlay">
+    <div class="modal-dialog-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Invite to {{ currentCompany ? currentCompany.name : '' }}</h3>
+        <button class="icon-btn" @click="activeModal = null"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form @submit.prevent="handleSendInvite">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Colleague's Email Address</label>
+            <input 
+              type="email" 
+              v-model="inviteForm.email" 
+              class="form-control" 
+              placeholder="colleague@company.com" 
+              required 
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <select v-model="inviteForm.role" class="form-control">
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <!-- Pending Invites List -->
+          <div v-if="companyInvites.length > 0" class="mt-3">
+            <label class="form-label">Pending Invites ({{ companyInvites.length }})</label>
+            <div style="display: flex; flex-direction: column; gap: 6px; max-height: 120px; overflow-y: auto;">
+              <div 
+                v-for="inv in companyInvites" 
+                :key="inv.id" 
+                style="display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: var(--bg-input); border-radius: var(--radius-sm); font-size: 0.8rem;"
+              >
+                <span>{{ inv.email }} ({{ inv.role }})</span>
+                <button type="button" class="btn-danger" style="padding: 2px 6px; font-size: 0.72rem; border-radius: 4px;" @click="handleRevokeInvite(inv.id)">
+                  Revoke
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="activeModal = null">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="inviteForm.isSubmitting">
+            <i class="fa-solid fa-paper-plane"></i> Send Invite
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Channel Modal -->
+  <div v-if="activeModal === 'channel'" class="modal-overlay">
+    <div class="modal-dialog-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Channel</h3>
+        <button class="icon-btn" @click="activeModal = null"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form @submit.prevent="handleCreateChannel">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Channel Name</label>
+            <input 
+              type="text" 
+              v-model="channelForm.name" 
+              class="form-control" 
+              placeholder="e.g. engineering, design-reviews, watercooler" 
+              required 
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Description (Optional)</label>
+            <input 
+              type="text" 
+              v-model="channelForm.description" 
+              class="form-control" 
+              placeholder="What is this channel about?" 
+            />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="activeModal = null">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="channelForm.isSubmitting">Create Channel</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Personal Custom Group Modal -->
+  <div v-if="activeModal === 'personalGroup'" class="modal-overlay">
+    <div class="modal-dialog-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Create Personal Custom Group</h3>
+        <button class="icon-btn" @click="activeModal = null"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form @submit.prevent="handleSavePersonalGroup">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Group Name</label>
+            <input 
+              type="text" 
+              v-model="personalGroupForm.name" 
+              class="form-control" 
+              placeholder="e.g. Project Alpha Squad, Lunch Buddies" 
+              required 
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Select Members</label>
+            <div class="member-select-list">
+              <div 
+                v-for="user in directMessageUsers" 
+                :key="user.uid" 
+                class="task-item-row"
+                :class="{ selected: personalGroupForm.selectedMemberUids.includes(user.uid) }"
+                @click="toggleMemberSelection(user.uid)"
+              >
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <user-avatar :user="user" size="sm"></user-avatar>
+                  <span>{{ user.displayName || user.email }}</span>
+                </div>
+                <i class="fa-solid ms-auto" :class="personalGroupForm.selectedMemberUids.includes(user.uid) ? 'fa-check-circle text-primary' : 'fa-circle-notch text-dim'"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="activeModal = null">Cancel</button>
+          <button type="submit" class="btn btn-primary" :disabled="personalGroupForm.isSubmitting">Save Group</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- User Profile & Status Modal -->
+  <div v-if="activeModal === 'profile'" class="modal-overlay">
+    <div class="modal-dialog-box">
+      <div class="modal-header">
+        <h3 class="modal-title">Your Profile &amp; Status</h3>
+        <button class="icon-btn" @click="activeModal = null"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form @submit.prevent="handleSaveProfile">
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Display Name</label>
+            <input type="text" v-model="profileForm.displayName" class="form-control" required />
+          </div>
+
+          <!-- Status Presets -->
+          <div class="form-group">
+            <label class="form-label">Quick Status Presets</label>
+            <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+              <button 
+                v-for="(p, idx) in CONSTANTS.STATUS_PRESETS" 
+                :key="idx" 
+                type="button" 
+                class="btn btn-secondary" 
+                style="font-size: 0.76rem; padding: 4px 8px;"
+                @click="applyStatusPreset(p)"
+              >
+                {{ p.icon }} {{ p.text }}
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Status</label>
+            <select v-model="profileForm.status" class="form-control">
+              <option v-for="opt in CONSTANTS.STATUS_OPTIONS" :key="opt.id" :value="opt.id">
+                {{ opt.label }}
+              </option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Custom Status Message</label>
+            <input type="text" v-model="profileForm.statusMessage" class="form-control" placeholder="e.g. In meetings / coding / AFK" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" @click="activeModal = null">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Lightbox Fullscreen Image Preview -->
+  <div v-if="lightboxImage" class="lightbox-modal" @click="lightboxImage = null">
+    <img :src="lightboxImage" class="lightbox-img" alt="Enlarged Preview" />
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container">
+    <div 
+      v-for="t in toasts" 
+      :key="t.id" 
+      class="app-toast" 
+      :class="'toast-' + t.type"
+    >
+      <i class="fa-solid" :class="t.type === 'success' ? 'fa-circle-check' : (t.type === 'error' ? 'fa-circle-exclamation' : 'fa-circle-info')"></i>
+      <span>{{ t.message }}</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- Scripts -->
+<script src="js/constants.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/firebase-config.js"></script>
+<script src="js/components.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
