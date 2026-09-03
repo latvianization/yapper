@@ -7,6 +7,8 @@ class ChannelModel {
   final String topic;
   final bool isPrivate;
   final int unreadCount;
+  final String companyId;
+  final List<String> memberUids;
 
   const ChannelModel({
     required this.id,
@@ -17,6 +19,8 @@ class ChannelModel {
     this.topic = '',
     this.isPrivate = false,
     this.unreadCount = 0,
+    this.companyId = 'comp_default',
+    this.memberUids = const [],
   });
 
   ChannelModel copyWith({
@@ -28,6 +32,8 @@ class ChannelModel {
     String? topic,
     bool? isPrivate,
     int? unreadCount,
+    String? companyId,
+    List<String>? memberUids,
   }) {
     return ChannelModel(
       id: id ?? this.id,
@@ -38,6 +44,8 @@ class ChannelModel {
       topic: topic ?? this.topic,
       isPrivate: isPrivate ?? this.isPrivate,
       unreadCount: unreadCount ?? this.unreadCount,
+      companyId: companyId ?? this.companyId,
+      memberUids: memberUids ?? this.memberUids,
     );
   }
 
@@ -51,6 +59,8 @@ class ChannelModel {
       topic: map['topic'] as String? ?? map['description'] as String? ?? '',
       isPrivate: map['isPrivate'] as bool? ?? false,
       unreadCount: map['unreadCount'] as int? ?? 0,
+      companyId: map['companyId'] as String? ?? 'comp_default',
+      memberUids: List<String>.from(map['memberUids'] ?? []),
     );
   }
 
@@ -64,6 +74,8 @@ class ChannelModel {
       'topic': topic,
       'isPrivate': isPrivate,
       'unreadCount': unreadCount,
+      'companyId': companyId,
+      'memberUids': memberUids,
     };
   }
 }

@@ -1,12 +1,15 @@
+import 'dart:convert';
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
+import 'package:yapper/core/constants/app_constants.dart';
 import 'package:yapper/core/services/notification_service.dart';
 import 'package:yapper/core/utils/crypto_helper.dart';
+import 'package:yapper/features/auth/models/user_model.dart';
 import 'package:yapper/features/auth/providers/auth_provider.dart';
 import 'package:yapper/features/chat/models/channel_model.dart';
 import 'package:yapper/features/chat/models/message_model.dart';
-
 
 class ChatState {
   final List<ChannelModel> channels;
@@ -38,10 +41,11 @@ class ChatState {
     SecretKey? e2eeKey,
     String? e2eeFingerprint,
     String? searchQuery,
+    bool clearActiveChannel = false,
   }) {
     return ChatState(
       channels: channels ?? this.channels,
-      activeChannel: activeChannel ?? this.activeChannel,
+      activeChannel: clearActiveChannel ? null : (activeChannel ?? this.activeChannel),
       messages: messages ?? this.messages,
       isLoading: isLoading ?? this.isLoading,
       isE2EEActive: isE2EEActive ?? this.isE2EEActive,
@@ -55,152 +59,274 @@ class ChatState {
 class ChatNotifier extends StateNotifier<ChatState> {
   final Ref ref;
   static const _uuid = Uuid();
+  static const String _keyChannels = 'yapper_channels_store';
+  static const String _keyMessages = 'yapper_messages_store';
+
+  List<ChannelModel> _allChannels = [];
+  List<MessageModel> _allMessages = [];
 
   ChatNotifier(this.ref) : super(const ChatState()) {
-    _initDemoData();
+    _initChatData();
+    // Reactively update visible channels when active user/company changes
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      if (previous?.user?.uid != next.user?.uid || previous?.user?.companyId != next.user?.companyId) {
+        _syncForUser(next.user);
+      }
+    });
   }
 
-  void _initDemoData() {
-    final defaultChannels = [
-      const ChannelModel(
-        id: 'announcements',
-        name: 'announcements',
-        category: 'ANNOUNCEMENTS',
-        type: 'announcement',
-        topic: 'Company-wide updates, roadmap releases, and executive announcements',
-      ),
-      const ChannelModel(
-        id: 'general',
-        name: 'general',
-        category: 'TEXT CHANNELS',
-        type: 'text',
-        topic: 'General team discussion, chatter, and watercooler talk',
-      ),
-      const ChannelModel(
-        id: 'engineering',
-        name: 'engineering',
-        category: 'TEXT CHANNELS',
-        type: 'text',
-        topic: 'Code architecture, deploys, pull requests, and bug triage',
-      ),
-      const ChannelModel(
-        id: 'ci-builds',
-        name: 'ci-builds',
-        category: 'CI & ALERTS',
-        type: 'text',
-        topic: 'Automated CI/CD build statuses & GitHub Actions deployment webhooks',
-      ),
-      const ChannelModel(
-        id: 'sentry-alerts',
-        name: 'sentry-alerts',
-        category: 'CI & ALERTS',
-        type: 'text',
-        topic: 'Real-time production exception alerts & error crash tracing',
-      ),
-      const ChannelModel(
-        id: 'random',
-        name: 'random',
-        category: 'TEXT CHANNELS',
-        type: 'text',
-        topic: 'Memes, music, gaming, and casual hangouts',
-      ),
-      const ChannelModel(
-        id: 'voice-stage',
-        name: 'voice-stage',
-        category: 'VOICE & HUDDLES',
-        type: 'voice',
-        topic: 'Drop-in live audio stage and community huddle',
-      ),
-    ];
+  bool canUserAccessChannel(ChannelModel channel, UserModel? user) {
+    if (user == null) return false;
+    // 1. Multi-tenancy check: User can only access channels within their company
+    if (channel.companyId != user.companyId) return false;
+    // 2. Owner permissions: Workspace owner can view all channels in their company
+    if (user.role == AppConstants.roleOwner) return true;
+    // 3. Public channel: Any member of this company can view
+    if (!channel.isPrivate) return true;
+    // 4. Restricted/private channel: Only assigned members can view
+    return channel.memberUids.contains(user.uid);
+  }
 
-    final initialMessages = [
-      MessageModel(
-        id: _uuid.v4(),
-        channelId: 'general',
-        senderId: 'user_sarah',
-        senderName: 'Sarah Chen',
-        text: 'Welcome to the new Flutter-powered **Yapper** workspace! 🚀 Performance across desktop and mobile is unbelievable.',
-        createdAt: DateTime.now().subtract(const Duration(minutes: 45)),
-        reactions: {'🚀': ['user_alex', 'user_marcus'], '❤️': ['user_sarah']},
-      ),
-      MessageModel(
-        id: _uuid.v4(),
-        channelId: 'general',
-        senderId: 'user_marcus',
-        senderName: 'Marcus Vance',
-        text: 'Just deployed the zero-knowledge E2EE mode and waveform voice memo support.',
-        createdAt: DateTime.now().subtract(const Duration(minutes: 20)),
-        taskList: {
-          'title': 'Sprint Deploy Checklist',
-          'items': [
-            {'text': 'Migrate Vue state to Riverpod Notifier', 'done': true, 'completedBy': 'Alex'},
-            {'text': 'Implement multiplatform GoRouter shell', 'done': true, 'completedBy': 'Alex'},
-            {'text': 'Verify 120Hz canvas whiteboard', 'done': false},
-          ]
-        },
-      ),
-      MessageModel(
-        id: _uuid.v4(),
-        channelId: 'ci-builds',
-        senderId: 'webhook_github',
-        senderName: 'GitHub Actions',
-        senderPhotoUrl: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
-        isBot: true,
-        text: '🚀 **Deployment Alert**: Build #142 on branch `main` completed with status: **SUCCESS**',
-        createdAt: DateTime.now().subtract(const Duration(minutes: 10)),
-        embeds: [
-          {
-            'title': 'CI Pipeline Succeeded: Build #142',
-            'description': 'All unit tests, static analysis, and multiplatform builds passed without errors.',
-            'url': 'https://github.com/your-org/yapper/actions/runs/142',
-            'color': 65280, // Green
-            'fields': [
-              {'name': 'Branch', 'value': '`main`', 'inline': true},
-              {'name': 'Commit', 'value': '`a8f23bc`', 'inline': true},
-              {'name': 'Triggered By', 'value': 'Push to `main`', 'inline': true},
-              {'name': 'Environment', 'value': 'Production (Web, Android, iOS, Desktop)', 'inline': false},
-            ],
-            'footer': {
-              'text': 'Yapper CI/CD Integration',
-              'iconUrl': 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png'
-            },
-            'timestamp': DateTime.now().subtract(const Duration(minutes: 10)).toIso8601String(),
-          }
-        ],
-      ),
-    ];
+  Future<void> _initChatData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
 
+      // 1. Load or seed Channels
+      final channelsJson = prefs.getString(_keyChannels);
+      if (channelsJson != null) {
+        final list = jsonDecode(channelsJson) as List<dynamic>;
+        _allChannels = list.map((e) => ChannelModel.fromJson(e as Map<String, dynamic>)).toList();
+      } else {
+        _allChannels = [
+          // Acme Technologies (comp_acme)
+          const ChannelModel(
+            id: 'acme_announcements',
+            name: 'announcements',
+            category: 'ANNOUNCEMENTS',
+            type: 'announcement',
+            topic: 'Company-wide news and roadmaps',
+            companyId: 'comp_acme',
+            isPrivate: false,
+          ),
+          const ChannelModel(
+            id: 'acme_general',
+            name: 'general',
+            category: 'TEXT CHANNELS',
+            type: 'text',
+            topic: 'General team discussion & chatter',
+            companyId: 'comp_acme',
+            isPrivate: false,
+          ),
+          const ChannelModel(
+            id: 'acme_engineering',
+            name: 'engineering',
+            category: 'TEXT CHANNELS',
+            type: 'text',
+            topic: 'Code architecture, deploys & pull requests',
+            companyId: 'comp_acme',
+            isPrivate: false,
+          ),
+          const ChannelModel(
+            id: 'acme_product',
+            name: 'product',
+            category: 'TEXT CHANNELS',
+            type: 'text',
+            topic: 'Product design, roadmaps & feature specs',
+            companyId: 'comp_acme',
+            isPrivate: false,
+          ),
+          const ChannelModel(
+            id: 'acme_executive_confidential',
+            name: 'executive-confidential',
+            category: 'TEXT CHANNELS',
+            type: 'text',
+            topic: 'Owner and assigned leads strategic planning',
+            companyId: 'comp_acme',
+            isPrivate: true,
+            memberUids: ['user_alex'], // Only Alex Rivera (Owner) assigned; Bob cannot view!
+          ),
+
+          // Stark Industries (comp_stark) - Completely separate tenant
+          const ChannelModel(
+            id: 'stark_announcements',
+            name: 'announcements',
+            category: 'ANNOUNCEMENTS',
+            type: 'announcement',
+            topic: 'Stark Industries executive orders',
+            companyId: 'comp_stark',
+            isPrivate: false,
+          ),
+          const ChannelModel(
+            id: 'stark_general',
+            name: 'general',
+            category: 'TEXT CHANNELS',
+            type: 'text',
+            topic: 'Stark tech chatter & ideas',
+            companyId: 'comp_stark',
+            isPrivate: false,
+          ),
+          const ChannelModel(
+            id: 'stark_iron_legion',
+            name: 'iron-legion-rnd',
+            category: 'TEXT CHANNELS',
+            type: 'text',
+            topic: 'Mark suits & defense architecture',
+            companyId: 'comp_stark',
+            isPrivate: true,
+            memberUids: ['user_tony'], // Only Tony Stark assigned; Peter cannot view unless assigned!
+          ),
+        ];
+        await prefs.setString(_keyChannels, jsonEncode(_allChannels.map((c) => c.toJson()).toList()));
+      }
+
+      // 2. Load or seed Messages
+      final messagesJson = prefs.getString(_keyMessages);
+      if (messagesJson != null) {
+        final list = jsonDecode(messagesJson) as List<dynamic>;
+        _allMessages = list.map((e) => MessageModel.fromJson(e as Map<String, dynamic>)).toList();
+      } else {
+        _allMessages = [
+          MessageModel(
+            id: _uuid.v4(),
+            channelId: 'acme_general',
+            senderId: 'user_alex',
+            senderName: 'Alex Rivera',
+            text: 'Welcome to Acme Technologies workspace! 🚀 Only Acme members can see this.',
+            createdAt: DateTime.now().subtract(const Duration(minutes: 60)),
+          ),
+          MessageModel(
+            id: _uuid.v4(),
+            channelId: 'acme_executive_confidential',
+            senderId: 'user_alex',
+            senderName: 'Alex Rivera',
+            text: '🔒 [RESTRICTED] Executive Board Roadmap: Visible exclusively to Workspace Owner and assigned leads.',
+            createdAt: DateTime.now().subtract(const Duration(minutes: 30)),
+          ),
+          MessageModel(
+            id: _uuid.v4(),
+            channelId: 'stark_general',
+            senderId: 'user_tony',
+            senderName: 'Tony Stark',
+            text: 'Welcome to Stark Industries. Zero tolerance for other company snooping.',
+            createdAt: DateTime.now().subtract(const Duration(minutes: 40)),
+          ),
+          MessageModel(
+            id: _uuid.v4(),
+            channelId: 'stark_iron_legion',
+            senderId: 'user_tony',
+            senderName: 'Tony Stark',
+            text: '🔒 [RESTRICTED] Arc Reactor & Mark 85 specifications. Strictly classified.',
+            createdAt: DateTime.now().subtract(const Duration(minutes: 15)),
+          ),
+        ];
+        await prefs.setString(_keyMessages, jsonEncode(_allMessages.map((m) => m.toJson()).toList()));
+      }
+
+      // 3. Sync channels for active user
+      final currentUser = ref.read(authProvider).user;
+      _syncForUser(currentUser);
+    } catch (_) {}
+  }
+
+  void _syncForUser(UserModel? user) {
+    if (user == null) {
+      state = state.copyWith(
+        channels: [],
+        clearActiveChannel: true,
+        messages: [],
+      );
+      return;
+    }
+
+    // Filter channels: ONLY channels matching user's company that user has permission to view
+    final accessibleChannels = _allChannels.where((c) => canUserAccessChannel(c, user)).toList();
+
+    // If active channel is invalid or not accessible, switch to first accessible channel
+    ChannelModel? active = state.activeChannel;
+    if (active == null || !accessibleChannels.any((c) => c.id == active!.id)) {
+      active = accessibleChannels.isNotEmpty ? accessibleChannels.first : null;
+    }
+
+    // Filter messages: ONLY messages belonging to accessible channels
+    final accessibleChannelIds = accessibleChannels.map((c) => c.id).toSet();
+    final accessibleMessages = _allMessages.where((m) => accessibleChannelIds.contains(m.channelId)).toList();
 
     state = state.copyWith(
-      channels: defaultChannels,
-      activeChannel: defaultChannels.first,
-      messages: initialMessages,
+      channels: accessibleChannels,
+      activeChannel: active,
+      messages: accessibleMessages,
     );
-    notificationService.setActiveChannel(defaultChannels.first.id);
+
+    if (active != null) {
+      notificationService.setActiveChannel(active.id);
+    }
   }
 
   void selectChannel(ChannelModel channel) {
+    final user = ref.read(authProvider).user;
+    if (!canUserAccessChannel(channel, user)) return;
+
     state = state.copyWith(activeChannel: channel);
     notificationService.setActiveChannel(channel.id);
   }
 
-  Future<void> receiveIncomingMessage(MessageModel message) async {
-    state = state.copyWith(messages: [...state.messages, message]);
-    final currentUserId = ref.read(authProvider).user?.uid ?? '';
-    final channel = state.channels.firstWhere(
-      (c) => c.id == message.channelId,
-      orElse: () => ChannelModel(id: message.channelId, name: message.channelId),
+  Future<void> createChannel({
+    required String name,
+    required String category,
+    String topic = '',
+    bool isPrivate = false,
+    List<String> memberUids = const [],
+  }) async {
+    final user = ref.read(authProvider).user;
+    if (user == null) return;
+
+    final newChannel = ChannelModel(
+      id: 'chan_${DateTime.now().millisecondsSinceEpoch}',
+      name: name.trim().toLowerCase().replaceAll(' ', '-'),
+      category: category,
+      type: 'text',
+      topic: topic,
+      isPrivate: isPrivate,
+      companyId: user.companyId,
+      // If private, ensure the creator is always included
+      memberUids: isPrivate ? {...memberUids, user.uid}.toList() : const [],
     );
 
+    _allChannels.add(newChannel);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyChannels, jsonEncode(_allChannels.map((c) => c.toJson()).toList()));
+
+    _syncForUser(user);
+    state = state.copyWith(activeChannel: newChannel);
+  }
+
+  Future<void> receiveIncomingMessage(MessageModel message) async {
+    final user = ref.read(authProvider).user;
+    // Discard message if it doesn't belong to a channel the user can access
+    final targetChannel = _allChannels.firstWhere(
+      (c) => c.id == message.channelId,
+      orElse: () => ChannelModel(id: message.channelId, name: message.channelId, companyId: ''),
+    );
+
+    if (!canUserAccessChannel(targetChannel, user)) return;
+
+    _allMessages.add(message);
+    state = state.copyWith(messages: [...state.messages, message]);
+
+    final currentUserId = user?.uid ?? '';
     await notificationService.handleIncomingMessage(
       messageId: message.id,
       channelId: message.channelId,
-      channelName: channel.name,
+      channelName: targetChannel.name,
       senderId: message.senderId,
       senderName: message.senderName,
       currentUserId: currentUserId,
       messageText: message.text,
     );
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyMessages, jsonEncode(_allMessages.map((m) => m.toJson()).toList()));
   }
 
   Future<void> toggleE2EE(String passphrase) async {
@@ -235,6 +361,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
   }) async {
     final user = ref.read(authProvider).user;
     if (user == null || state.activeChannel == null) return;
+    if (!canUserAccessChannel(state.activeChannel!, user)) return;
 
     String finalText = text;
     String? encryptedPayload;
@@ -263,71 +390,79 @@ class ChatNotifier extends StateNotifier<ChatState> {
       poll: poll,
       attachments: attachments,
       ephemeralExpiresAt: ephemeralDuration > 0
-          ? DateTime.now().millisecondsSinceEpoch + ephemeralDuration
+          ? DateTime.now().millisecondsSinceEpoch + (ephemeralDuration * 1000)
           : 0,
     );
 
-    state = state.copyWith(
-      messages: [...state.messages, newMessage],
-    );
+    _allMessages.add(newMessage);
+    state = state.copyWith(messages: [...state.messages, newMessage]);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_keyMessages, jsonEncode(_allMessages.map((m) => m.toJson()).toList()));
   }
 
-  void toggleReaction(String messageId, String emoji) {
+  Future<void> toggleReaction(String messageId, String emoji) async {
+    await addReaction(messageId, emoji);
+  }
+
+  Future<void> addReaction(String messageId, String emoji) async {
     final user = ref.read(authProvider).user;
     if (user == null) return;
 
     final updated = state.messages.map((m) {
       if (m.id != messageId) return m;
 
-      final currentReactions = Map<String, List<String>>.from(m.reactions);
-      final usersForEmoji = List<String>.from(currentReactions[emoji] ?? []);
+      final reactions = Map<String, List<String>>.from(m.reactions);
+      final currentUsers = List<String>.from(reactions[emoji] ?? []);
 
-      if (usersForEmoji.contains(user.uid)) {
-        usersForEmoji.remove(user.uid);
-        if (usersForEmoji.isEmpty) {
-          currentReactions.remove(emoji);
-        } else {
-          currentReactions[emoji] = usersForEmoji;
-        }
+      if (currentUsers.contains(user.uid)) {
+        currentUsers.remove(user.uid);
       } else {
-        usersForEmoji.add(user.uid);
-        currentReactions[emoji] = usersForEmoji;
+        currentUsers.add(user.uid);
       }
 
-      return m.copyWith(reactions: currentReactions);
+      if (currentUsers.isEmpty) {
+        reactions.remove(emoji);
+      } else {
+        reactions[emoji] = currentUsers;
+      }
+
+      return m.copyWith(reactions: reactions);
     }).toList();
 
     state = state.copyWith(messages: updated);
   }
 
-  void toggleTaskItem(String messageId, int itemIndex) {
+  Future<void> toggleTaskItem(String messageId, int itemIndex) async {
     final user = ref.read(authProvider).user;
     if (user == null) return;
 
     final updated = state.messages.map((m) {
       if (m.id != messageId || m.taskList == null) return m;
 
-      final taskListMap = Map<String, dynamic>.from(m.taskList!);
-      final items = List<Map<String, dynamic>>.from(taskListMap['items'] ?? []);
+      final taskMap = Map<String, dynamic>.from(m.taskList!);
+      final items = List<Map<String, dynamic>>.from(
+        (taskMap['items'] as List).map((i) => Map<String, dynamic>.from(i)),
+      );
 
       if (itemIndex < items.length) {
-        final current = items[itemIndex];
-        final isDone = !(current['done'] as bool? ?? false);
-        items[itemIndex] = {
-          ...current,
-          'done': isDone,
-          'completedBy': isDone ? user.displayName : null,
-        };
+        final currentDone = items[itemIndex]['done'] == true;
+        items[itemIndex]['done'] = !currentDone;
+        if (!currentDone) {
+          items[itemIndex]['completedBy'] = user.displayName;
+        } else {
+          items[itemIndex].remove('completedBy');
+        }
       }
 
-      taskListMap['items'] = items;
-      return m.copyWith(taskList: taskListMap);
+      taskMap['items'] = items;
+      return m.copyWith(taskList: taskMap);
     }).toList();
 
     state = state.copyWith(messages: updated);
   }
 
-  void votePoll(String messageId, int optionIndex) {
+  Future<void> votePoll(String messageId, int optionIndex) async {
     final user = ref.read(authProvider).user;
     if (user == null) return;
 
@@ -335,7 +470,9 @@ class ChatNotifier extends StateNotifier<ChatState> {
       if (m.id != messageId || m.poll == null) return m;
 
       final pollMap = Map<String, dynamic>.from(m.poll!);
-      final options = List<Map<String, dynamic>>.from(pollMap['options'] ?? []);
+      final options = List<Map<String, dynamic>>.from(
+        (pollMap['options'] as List).map((o) => Map<String, dynamic>.from(o)),
+      );
 
       for (int i = 0; i < options.length; i++) {
         final votes = List<String>.from(options[i]['votes'] ?? []);

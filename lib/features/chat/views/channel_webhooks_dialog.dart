@@ -60,11 +60,11 @@ class _ChannelWebhooksDialogState extends State<ChannelWebhooksDialog> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '#${widget.channel.name} • CI Webhooks',
+                        '#${widget.channel.name} • Incoming Webhooks',
                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textMain),
                       ),
                       const Text(
-                        'Discord-compatible webhook endpoint for CI/CD pipelines',
+                        'Discord-compatible webhook endpoint for bots and external tools',
                         style: TextStyle(fontSize: 12, color: AppColors.textDim),
                       ),
                     ],
@@ -119,7 +119,7 @@ class _ChannelWebhooksDialogState extends State<ChannelWebhooksDialog> {
 
               const SizedBox(height: 16),
               const Text(
-                'CURL / CI/CD PAYLOAD EXAMPLE',
+                'CURL / WEBHOOK PAYLOAD EXAMPLE',
                 style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.textDim, letterSpacing: 0.5),
               ),
               const SizedBox(height: 8),
@@ -136,14 +136,14 @@ class _ChannelWebhooksDialogState extends State<ChannelWebhooksDialog> {
                   'curl -X POST "\$YAPPER_WEBHOOK_URL" \\\n'
                   '  -H "Content-Type: application/json" \\\n'
                   '  -d \'{\n'
-                  '    "username": "GitHub Actions",\n'
-                  '    "content": "🚀 Build #142 passed on branch `main`",\n'
+                  '    "username": "Integration Bot",\n'
+                  '    "content": "Hello team! Update from external service.",\n'
                   '    "embeds": [{\n'
-                  '      "title": "CI Pipeline Succeeded",\n'
+                  '      "title": "Service Status Update",\n'
                   '      "color": 65280,\n'
                   '      "fields": [\n'
-                  '        { "name": "Branch", "value": "main", "inline": true },\n'
-                  '        { "name": "Commit", "value": "a8f23bc", "inline": true }\n'
+                  '        { "name": "Environment", "value": "production", "inline": true },\n'
+                  '        { "name": "Health", "value": "100% Operational", "inline": true }\n'
                   '      ]\n'
                   '    }]\n'
                   '  }\'',

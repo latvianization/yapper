@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:yapper/core/constants/app_constants.dart';
 import 'package:yapper/core/services/notification_service.dart';
 import 'package:yapper/core/theme/app_theme.dart';
 import 'package:yapper/features/auth/providers/auth_provider.dart';
@@ -90,6 +91,130 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
     showDialog(
       context: context,
       builder: (ctx) => ChannelWebhooksDialog(channel: channel),
+    );
+  }
+
+  void _openCreateChannelDialog() {
+    final nameController = TextEditingController();
+    final topicController = TextEditingController();
+    const category = 'TEXT CHANNELS';
+    bool isPrivate = false;
+    final authState = ref.read(authProvider);
+    final companyUsers = authState.registeredUsers.where((u) => u.companyId == authState.user?.companyId).toList();
+    final selectedMembers = <String>{};
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return Dialog(
+            backgroundColor: AppColors.bgSurface1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.hash, color: AppColors.primary, size: 20),
+                        const SizedBox(width: 8),
+                        const Text('Create Channel', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.textMain)),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(LucideIcons.x, size: 18),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Channel Name', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textDim)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameController,
+                      style: const TextStyle(color: AppColors.textMain),
+                      decoration: const InputDecoration(hintText: 'e.g. leads-chat'),
+                    ),
+                    const SizedBox(height: 14),
+                    const Text('Topic / Purpose', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textDim)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: topicController,
+                      style: const TextStyle(color: AppColors.textMain),
+                      decoration: const InputDecoration(hintText: 'What is this channel for?'),
+                    ),
+                    const SizedBox(height: 16),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      value: isPrivate,
+                      onChanged: (val) => setDialogState(() => isPrivate = val),
+                      title: const Text('Private / Restricted Channel', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.textMain)),
+                      subtitle: const Text('Only Workspace Owner and assigned members can view', style: TextStyle(fontSize: 11, color: AppColors.textDim)),
+                    ),
+                    if (isPrivate) ...[
+                      const SizedBox(height: 10),
+                      const Text('Assign Members:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textDim)),
+                      const SizedBox(height: 6),
+                      ConstrainedBox(
+                        constraints: const BoxConstraints(maxHeight: 130),
+                        child: ListView(
+                          shrinkWrap: true,
+                          children: companyUsers.map((user) {
+                            final isOwner = user.role == AppConstants.roleOwner;
+                            final isSelected = selectedMembers.contains(user.uid) || isOwner;
+                            return CheckboxListTile(
+                              dense: true,
+                              value: isSelected,
+                              enabled: !isOwner,
+                              title: Text(
+                                '${user.displayName} ${isOwner ? "(Owner - Always Access)" : ""}',
+                                style: const TextStyle(fontSize: 12, color: AppColors.textMain),
+                              ),
+                              onChanged: isOwner ? null : (checked) {
+                                setDialogState(() {
+                                  if (checked == true) {
+                                    selectedMembers.add(user.uid);
+                                  } else {
+                                    selectedMembers.remove(user.uid);
+                                  }
+                                });
+                              },
+                            );
+                          }).toList(),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 20),
+                    ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      onPressed: () {
+                        if (nameController.text.trim().isEmpty) return;
+                        ref.read(chatProvider.notifier).createChannel(
+                          name: nameController.text.trim(),
+                          category: category,
+                          topic: topicController.text.trim(),
+                          isPrivate: isPrivate,
+                          memberUids: selectedMembers.toList(),
+                        );
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text('Create Channel', style: TextStyle(fontWeight: FontWeight.bold)),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -279,13 +404,13 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                   child: const Text('⚡', style: TextStyle(fontSize: 18)),
                 ),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Yapper HQ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textMain), overflow: TextOverflow.ellipsis),
-                      Text('Engineering & Product', style: TextStyle(fontSize: 10, color: AppColors.textDim), overflow: TextOverflow.ellipsis),
+                      Text(authState.user?.companyName ?? 'Yapper HQ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textMain), overflow: TextOverflow.ellipsis),
+                      Text(authState.user?.role == 'owner' ? '👑 Workspace Owner' : '👥 Team Member', style: const TextStyle(fontSize: 10, color: AppColors.textDim), overflow: TextOverflow.ellipsis),
                     ],
                   ),
                 ),
@@ -330,13 +455,21 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                             letterSpacing: 0.6,
                           ),
                         ),
+                        const Spacer(),
+                        if (category == 'TEXT CHANNELS')
+                          InkWell(
+                            onTap: _openCreateChannelDialog,
+                            child: const Icon(LucideIcons.plus, size: 14, color: AppColors.textDim),
+                          ),
                       ],
                     ),
                   ),
                   ...chatState.channels.where((c) => c.category == category).map((ch) {
                     final isSelected = ch.id == chatState.activeChannel?.id;
                     IconData channelIcon;
-                    if (ch.type == 'voice') {
+                    if (ch.isPrivate) {
+                      channelIcon = LucideIcons.lock;
+                    } else if (ch.type == 'voice') {
                       channelIcon = LucideIcons.volume2;
                     } else if (ch.category == 'CI & ALERTS') {
                       channelIcon = LucideIcons.bot;
@@ -408,11 +541,18 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                           overflow: TextOverflow.ellipsis,
                         ),
                         Text(
-                          '@${authState.user!.status}',
+                          authState.user!.role == 'owner' ? '👑 Owner' : '👥 Member',
                           style: const TextStyle(fontSize: 11, color: AppColors.textDim),
                         ),
                       ],
                     ),
+                  ),
+                  IconButton(
+                    icon: const Icon(LucideIcons.logOut, size: 16, color: AppColors.textDim),
+                    tooltip: 'Sign Out',
+                    onPressed: () {
+                      ref.read(authProvider.notifier).logout();
+                    },
                   ),
                 ],
               ),

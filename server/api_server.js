@@ -1,8 +1,8 @@
 /**
- * Yapper Discord-Compatible CI/CD Webhook & Channel REST API Server
+ * Yapper Webhook & Channel REST API Server
  * 
- * Implements Discord-compatible Webhook and Channel endpoints for CI/CD integrations
- * (GitHub Actions, GitLab CI, CircleCI, Jenkins, Sentry alerts, etc.)
+ * Implements Discord-compatible Webhook and Channel endpoints for external integrations
+ * (Bots, notification scripts, monitoring tools, third-party services, etc.)
  * 
  * Uses standard Node.js built-ins with zero external dependencies.
  */
@@ -18,19 +18,18 @@ const channels = [
   { id: 'announcements', name: 'announcements', category: 'ANNOUNCEMENTS', type: 5, topic: 'Company-wide news and critical updates' },
   { id: 'general', name: 'general', category: 'TEXT CHANNELS', type: 0, topic: 'Company updates, chatter, and discussion' },
   { id: 'engineering', name: 'engineering', category: 'TEXT CHANNELS', type: 0, topic: 'Code architecture, deploys, and bug reports' },
-  { id: 'ci-builds', name: 'ci-builds', category: 'CI & ALERTS', type: 0, topic: 'Automated CI/CD deployment statuses & GitHub Actions' },
-  { id: 'sentry-alerts', name: 'sentry-alerts', category: 'CI & ALERTS', type: 0, topic: 'Production error tracing and crash reports' },
+  { id: 'product', name: 'product', category: 'TEXT CHANNELS', type: 0, topic: 'Roadmap planning, customer feedback, and design review' },
   { id: 'random', name: 'random', category: 'TEXT CHANNELS', type: 0, topic: 'Memes and watercooler chat' },
   { id: 'voice-stage', name: 'voice-stage', category: 'VOICE & HUDDLES', type: 2, topic: 'Drop-in audio stage huddle' }
 ];
 
 const webhooks = new Map();
-// Pre-seed a default CI webhook for #ci-builds
-webhooks.set('wh_ci_default', {
-  id: 'wh_ci_default',
-  name: 'GitHub Actions',
-  channelId: 'ci-builds',
-  token: 'ci_token_secret_12345',
+// Pre-seed a default webhook for #general
+webhooks.set('wh_default', {
+  id: 'wh_default',
+  name: 'General Bot',
+  channelId: 'general',
+  token: 'webhook_secret_token_123',
   createdAt: new Date().toISOString()
 });
 
@@ -72,7 +71,6 @@ const server = http.createServer(async (req, res) => {
   const pathname = parsedUrl.pathname;
   const method = req.method;
 
-
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -98,7 +96,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   try {
-    // 2. Discord-Compatible Webhook Execution: POST /api/webhooks/:channelId/:token
+    // 2. Incoming Webhook Execution: POST /api/webhooks/:channelId/:token
     const webhookMatch = pathname.match(/^\/api\/webhooks\/([^\/]+)\/([^\/]+)$/);
     if (webhookMatch && method === 'POST') {
       const [, channelId, token] = webhookMatch;
@@ -111,8 +109,8 @@ const server = http.createServer(async (req, res) => {
         id: `msg_${crypto.randomUUID()}`,
         channelId: targetChannel.id,
         senderId: 'webhook_bot',
-        senderName: payload.username || 'CI Bot',
-        senderPhotoUrl: payload.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+        senderName: payload.username || 'Bot',
+        senderPhotoUrl: payload.avatar_url || '',
         isBot: true,
         text: payload.content || '',
         embeds: (payload.embeds || []).map(embed => ({
@@ -147,7 +145,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 3. Discord-Compatible Bot Message API: POST /api/v1/channels/:channelId/messages
+    // 3. Channel Message API: POST /api/v1/channels/:channelId/messages
     const channelMsgMatch = pathname.match(/^\/api\/v1\/channels\/([^\/]+)\/messages$/);
     if (channelMsgMatch && method === 'POST') {
       const channelId = channelMsgMatch[1];
@@ -180,7 +178,7 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    // 5. Discord-Compatible Guild Channels API: GET /api/v1/guilds/:guildId/channels or GET /api/v1/channels
+    // 5. Channels API: GET /api/v1/channels
     if ((pathname === '/api/v1/channels' || pathname.startsWith('/api/v1/guilds/')) && method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(channels));
@@ -198,7 +196,7 @@ const server = http.createServer(async (req, res) => {
       const webhook = {
         id: whId,
         channel_id: channelId,
-        name: payload.name || 'CI Webhook',
+        name: payload.name || 'Custom Webhook',
         avatar: payload.avatar || null,
         token: token,
         url: `http://localhost:${PORT}/api/webhooks/${channelId}/${token}`
@@ -215,7 +213,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
         status: 'online',
-        service: 'Yapper Discord-Compatible CI/CD API',
+        service: 'Yapper Webhook & Channel REST API',
         version: '1.0.0',
         channelsCount: channels.length,
         connectedSSEListeners: sseClients.size
@@ -234,6 +232,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`🚀 Yapper Discord CI/CD API listening on http://localhost:${PORT}`);
+  console.log(`🚀 Yapper REST & Webhook API listening on http://localhost:${PORT}`);
   console.log(`   Incoming Webhook URL format: http://localhost:${PORT}/api/webhooks/:channelId/:token`);
 });

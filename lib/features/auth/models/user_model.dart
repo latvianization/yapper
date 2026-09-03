@@ -5,6 +5,8 @@ class UserModel {
   final String photoUrl;
   final String status; // online, busy, away, offline
   final String role; // owner, admin, member
+  final String companyId;
+  final String companyName;
 
   const UserModel({
     required this.uid,
@@ -13,6 +15,8 @@ class UserModel {
     this.photoUrl = '',
     this.status = 'online',
     this.role = 'member',
+    this.companyId = 'comp_default',
+    this.companyName = 'Yapper HQ',
   });
 
   UserModel copyWith({
@@ -22,6 +26,8 @@ class UserModel {
     String? photoUrl,
     String? status,
     String? role,
+    String? companyId,
+    String? companyName,
   }) {
     return UserModel(
       uid: uid ?? this.uid,
@@ -30,6 +36,8 @@ class UserModel {
       photoUrl: photoUrl ?? this.photoUrl,
       status: status ?? this.status,
       role: role ?? this.role,
+      companyId: companyId ?? this.companyId,
+      companyName: companyName ?? this.companyName,
     );
   }
 
@@ -41,6 +49,8 @@ class UserModel {
       'photoUrl': photoUrl,
       'status': status,
       'role': role,
+      'companyId': companyId,
+      'companyName': companyName,
     };
   }
 
@@ -52,6 +62,8 @@ class UserModel {
       photoUrl: map['photoUrl'] as String? ?? '',
       status: map['status'] as String? ?? 'online',
       role: map['role'] as String? ?? 'member',
+      companyId: map['companyId'] as String? ?? 'comp_default',
+      companyName: map['companyName'] as String? ?? 'Yapper HQ',
     );
   }
 }
