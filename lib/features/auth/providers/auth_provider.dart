@@ -9,6 +9,7 @@ class AuthState {
   final UserModel? user;
   final List<CompanyModel> companies;
   final List<UserModel> registeredUsers;
+  final Set<String> favoriteUserIds;
   final bool isLoading;
   final String? error;
 
@@ -16,6 +17,7 @@ class AuthState {
     this.user,
     this.companies = const [],
     this.registeredUsers = const [],
+    this.favoriteUserIds = const {},
     this.isLoading = false,
     this.error,
   });
@@ -26,6 +28,7 @@ class AuthState {
     UserModel? user,
     List<CompanyModel>? companies,
     List<UserModel>? registeredUsers,
+    Set<String>? favoriteUserIds,
     bool? isLoading,
     String? error,
     bool clearUser = false,
@@ -34,6 +37,7 @@ class AuthState {
       user: clearUser ? null : (user ?? this.user),
       companies: companies ?? this.companies,
       registeredUsers: registeredUsers ?? this.registeredUsers,
+      favoriteUserIds: favoriteUserIds ?? this.favoriteUserIds,
       isLoading: isLoading ?? this.isLoading,
       error: error,
     );
@@ -133,18 +137,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await prefs.setString(_keyPasswords, jsonEncode(defaultPasswords));
       }
 
-      // 3. Load active session
+      // 3. Load active session & favorites
       UserModel? activeUser;
+      Set<String> loadedFavorites = {};
       final userJson = prefs.getString(_keyUser);
       if (userJson != null) {
         final map = jsonDecode(userJson);
         activeUser = UserModel.fromJson(map);
+        final favList = prefs.getStringList('yapper_favorites_${activeUser.uid}');
+        if (favList != null) {
+          loadedFavorites = favList.toSet();
+        } else if (activeUser.uid == 'user_alex') {
+          loadedFavorites = {'user_bob'};
+        }
       }
 
       state = AuthState(
         user: activeUser,
         companies: loadedCompanies,
         registeredUsers: loadedUsers,
+        favoriteUserIds: loadedFavorites,
         isLoading: false,
       );
     } catch (e) {
@@ -181,8 +193,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         return false;
       }
 
+      final favList = prefs.getStringList('yapper_favorites_${user.uid}');
+      final favorites = favList?.toSet() ?? (user.uid == 'user_alex' ? {'user_bob'} : <String>{});
+
       await prefs.setString(_keyUser, jsonEncode(user.toJson()));
-      state = state.copyWith(user: user, isLoading: false, error: null);
+      state = state.copyWith(user: user, favoriteUserIds: favorites, isLoading: false, error: null);
       return true;
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
@@ -280,7 +295,24 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> switchUser(UserModel user) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_keyUser, jsonEncode(user.toJson()));
-    state = state.copyWith(user: user, error: null);
+    final favList = prefs.getStringList('yapper_favorites_${user.uid}');
+    final favorites = favList?.toSet() ?? (user.uid == 'user_alex' ? {'user_bob'} : <String>{});
+    state = state.copyWith(user: user, favoriteUserIds: favorites, error: null);
+  }
+
+  Future<void> toggleFavoriteUser(String targetUserId) async {
+    final current = Set<String>.from(state.favoriteUserIds);
+    if (current.contains(targetUserId)) {
+      current.remove(targetUserId);
+    } else {
+      current.add(targetUserId);
+    }
+    state = state.copyWith(favoriteUserIds: current);
+
+    if (state.user != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setStringList('yapper_favorites_${state.user!.uid}', current.toList());
+    }
   }
 
   Future<void> updateStatus(String newStatus) async {

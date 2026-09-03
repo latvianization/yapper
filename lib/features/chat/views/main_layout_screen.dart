@@ -218,6 +218,130 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
     );
   }
 
+  void _openTeammatesDialog() {
+    final searchController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final authState = ref.watch(authProvider);
+          final currentCompanyId = authState.user?.companyId;
+          final currentUserId = authState.user?.uid;
+          final query = searchController.text.trim().toLowerCase();
+
+          final companyUsers = authState.registeredUsers.where((u) {
+            final matchesCompany = u.companyId == currentCompanyId && u.uid != currentUserId;
+            if (!matchesCompany) return false;
+            if (query.isEmpty) return true;
+            return u.displayName.toLowerCase().contains(query) || u.email.toLowerCase().contains(query);
+          }).toList();
+
+          return Dialog(
+            backgroundColor: AppColors.bgSurface1,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(LucideIcons.users, color: AppColors.primary, size: 20),
+                        const SizedBox(width: 8),
+                        const Text(
+                          'Company Teammates',
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.textMain),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(LucideIcons.x, size: 18),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Star teammates to pin them to the Favorites container at the top of your sidebar.',
+                      style: TextStyle(fontSize: 12, color: AppColors.textDim),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: searchController,
+                      style: const TextStyle(color: AppColors.textMain),
+                      decoration: InputDecoration(
+                        hintText: 'Search teammates by name or email...',
+                        prefixIcon: const Icon(LucideIcons.search, size: 16, color: AppColors.textDim),
+                        suffixIcon: searchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(LucideIcons.x, size: 14),
+                                onPressed: () {
+                                  searchController.clear();
+                                  setDialogState(() {});
+                                },
+                              )
+                            : null,
+                      ),
+                      onChanged: (_) => setDialogState(() {}),
+                    ),
+                    const SizedBox(height: 16),
+                    Expanded(
+                      child: companyUsers.isEmpty
+                          ? const Center(
+                              child: Text('No teammates found in this workspace', style: TextStyle(color: AppColors.textDim, fontSize: 13)),
+                            )
+                          : ListView.separated(
+                              itemCount: companyUsers.length,
+                              separatorBuilder: (_, __) => const Divider(color: AppColors.borderColor, height: 1),
+                              itemBuilder: (context, idx) {
+                                final teammate = companyUsers[idx];
+                                final isFav = authState.favoriteUserIds.contains(teammate.uid);
+                                return ListTile(
+                                  dense: true,
+                                  contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  leading: UserAvatar(
+                                    name: teammate.displayName,
+                                    photoUrl: teammate.photoUrl,
+                                    status: teammate.status,
+                                    radius: 16,
+                                  ),
+                                  title: Text(
+                                    teammate.displayName,
+                                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.textMain),
+                                  ),
+                                  subtitle: Text(
+                                    '${teammate.role == "owner" ? "👑 Owner" : "👥 Member"} • ${teammate.email}',
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textDim),
+                                  ),
+                                  trailing: IconButton(
+                                    icon: Icon(
+                                      LucideIcons.star,
+                                      size: 18,
+                                      color: isFav ? Colors.amber : AppColors.textDim,
+                                    ),
+                                    tooltip: isFav ? 'Remove from Favorites' : 'Add to Favorites',
+                                    onPressed: () async {
+                                      await ref.read(authProvider.notifier).toggleFavoriteUser(teammate.uid);
+                                      setDialogState(() {});
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -436,6 +560,16 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                   title: const Text('Whiteboard', style: TextStyle(fontSize: 13, color: AppColors.textMain)),
                   onTap: _openWhiteboard,
                 ),
+                ListTile(
+                  dense: true,
+                  leading: const Icon(LucideIcons.users, size: 16, color: AppColors.success),
+                  title: const Text('Company Teammates', style: TextStyle(fontSize: 13, color: AppColors.textMain)),
+                  onTap: _openTeammatesDialog,
+                ),
+                const SizedBox(height: 8),
+
+                // Dedicated Separate Favorites Container at the top of the list
+                _buildFavoritesContainer(context, authState),
                 const SizedBox(height: 6),
 
                 // Discord-Style Categories
@@ -556,6 +690,171 @@ class _MainLayoutScreenState extends ConsumerState<MainLayoutScreen> with Widget
                   ),
                 ],
               ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFavoritesContainer(BuildContext context, AuthState authState) {
+    final companyTeammates = authState.registeredUsers
+        .where((u) => u.companyId == authState.user?.companyId && u.uid != authState.user?.uid)
+        .toList();
+    final favoriteUsers = companyTeammates
+        .where((u) => authState.favoriteUserIds.contains(u.uid))
+        .toList();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface1,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 8, 8, 4),
+            child: Row(
+              children: [
+                const Icon(LucideIcons.star, size: 13, color: Colors.amber),
+                const SizedBox(width: 6),
+                const Expanded(
+                  child: Text(
+                    'FAVORITES',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDim,
+                      letterSpacing: 0.6,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (favoriteUsers.isNotEmpty) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${favoriteUsers.length}',
+                      style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.primary),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+                InkWell(
+                  onTap: _openTeammatesDialog,
+                  borderRadius: BorderRadius.circular(4),
+                  child: const Padding(
+                    padding: EdgeInsets.all(2.0),
+                    child: Icon(LucideIcons.userPlus, size: 14, color: AppColors.textDim),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (favoriteUsers.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 2, 10, 8),
+              child: InkWell(
+                onTap: _openTeammatesDialog,
+                borderRadius: BorderRadius.circular(6),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSurface2.withValues(alpha: 0.4),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.5)),
+                  ),
+                  child: const Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Icon(LucideIcons.plus, size: 12, color: AppColors.textDim),
+                      SizedBox(width: 4),
+                      Text(
+                        'Add Favorites',
+                        style: TextStyle(fontSize: 11, color: AppColors.textDim),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 4),
+              itemCount: favoriteUsers.length,
+              itemBuilder: (context, index) {
+                final user = favoriteUsers[index];
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(6),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Favorite teammate: ${user.displayName} (${user.email})'),
+                            duration: const Duration(seconds: 1),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        child: Row(
+                          children: [
+                            UserAvatar(
+                              name: user.displayName,
+                              photoUrl: user.photoUrl,
+                              status: user.status,
+                              radius: 12,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    user.displayName,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.textMain,
+                                    ),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  Text(
+                                    user.role == 'owner' ? '👑 Owner' : '👥 Member',
+                                    style: const TextStyle(fontSize: 9, color: AppColors.textDim),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(LucideIcons.star, size: 14, color: Colors.amber),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              tooltip: 'Remove from Favorites',
+                              onPressed: () {
+                                ref.read(authProvider.notifier).toggleFavoriteUser(user.uid);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              },
             ),
         ],
       ),

@@ -143,5 +143,41 @@ void main() {
       expect(userDecoded.companyName, equals('Test Corp'));
       expect(userDecoded.role, equals(AppConstants.roleOwner));
     });
+
+    test('7. Favorite Company Teammates: Company isolation applies to teammates and favorites', () {
+      final allUsers = [
+        userAlexOwner, // Acme
+        userBobAssignedMember, // Acme
+        userDavidUnassignedMember, // Acme
+        userTonyOtherCompanyOwner, // Stark
+        userPeterOtherCompanyMember, // Stark
+      ];
+
+      // Alex looks for Acme company teammates (excluding self)
+      final acmeTeammates = allUsers
+          .where((u) => u.companyId == userAlexOwner.companyId && u.uid != userAlexOwner.uid)
+          .toList();
+
+      expect(acmeTeammates.map((u) => u.uid), containsAll(['user_bob', 'user_david']));
+      expect(acmeTeammates.map((u) => u.uid), isNot(contains('user_tony')));
+      expect(acmeTeammates.map((u) => u.uid), isNot(contains('user_peter')));
+
+      // Test favorite set toggling
+      final favorites = <String>{};
+      // Add Bob to favorites
+      favorites.add(userBobAssignedMember.uid);
+      expect(favorites.contains(userBobAssignedMember.uid), isTrue);
+
+      // Filter favorite teammates
+      final favoriteTeammates = acmeTeammates
+          .where((u) => favorites.contains(u.uid))
+          .toList();
+      expect(favoriteTeammates.length, equals(1));
+      expect(favoriteTeammates.first.displayName, equals('Bob Martinez'));
+
+      // Remove from favorites
+      favorites.remove(userBobAssignedMember.uid);
+      expect(favorites.contains(userBobAssignedMember.uid), isFalse);
+    });
   });
 }
